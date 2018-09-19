@@ -178,6 +178,8 @@ class GoogleAnalytics:
                 query_params['pageToken'] = page_token
             data_chunk = reports_object.batchGet(
                 body={'reportRequests': [query_params]}).execute()
+            if 'rows' not in data_chunk['reports'][0]['data']:
+                break
             data_rows = []
             meta_dict = {}
             try:
