@@ -89,7 +89,8 @@ class CassandraPersistence:
 
         if report_type in self.type_3_set:
             session_id = data_dict['dimensions'][1]
-            hit_id = str(time())
+            hit_id = data_dict['dimensions'][3] + \
+                '.' + str(data_dict['dimensions'][4])
             bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
                          session_id, hit_id, json_meta, json_data]
 
@@ -128,8 +129,8 @@ class GoogleAnalytics:
     # Initializes an Analytics Reporting API V4 service object.
     def authenticate(self):
         credentials = service_account.Credentials \
-                                     .from_service_account_file(self.KEY_FILE_LOCATION) \
-                                     .with_scopes(self.SCOPES)
+            .from_service_account_file(self.KEY_FILE_LOCATION) \
+            .with_scopes(self.SCOPES)
         # Build the service object.
         self.analytics = build('analyticsreporting',
                                'v4', credentials=credentials)
