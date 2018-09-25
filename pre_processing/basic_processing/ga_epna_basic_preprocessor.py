@@ -33,7 +33,7 @@ class BasicPreprocessor:
         primary_key['ga_epnas_df'] = ['client_id',
                                       'day_of_data_capture', 'session_id']
         primary_key['ga_epnah_df'] = [
-            'client_id', 'day_of_data_capture', 'hit_id']
+            'client_id', 'day_of_data_capture', 'session_id', 'hit_id']
         primary_key['ga_epnat_df'] = ['client_id',
                                       'day_of_data_capture', 'session_id', 'transaction_id']
 
@@ -257,11 +257,18 @@ class BasicPreprocessor:
         return {'result_df': result_df,
                 'schema_as_list': schema_as_list}
 
-    def process_user_data(self, data):
+    def process_user_data(self, user_data, spark_session):
 
-        user_data = data.dropDuplicates()
+        user_data.cache()
 
-        return user_data
+        user_data.createOrReplaceTempView('user_data')
+
+        groupe_by_client_id_sql = "SELECT client_id, device_category, SUM(sessions) OVER (PARTITION BY client_id) AS sessions, SUM(bounces) OVER (PARTITION BY client_id) AS bounces, SUM(revenue_per_user) OVER (PARTITION BY client_id) AS revenue_per_user, SUM(transactions_per_user) OVER (PARTITION BY client_id) AS transactions_per_user FROM user_data"
+
+        grouped_by_client_id_df = spark_session.sql(
+            groupe_by_client_id_sql)
+
+        return grouped_by_client_id_df
 
     def process_sessions_and_transactions_data(self, sessions_data, transactions_data):
         sessions_data = sessions_data.drop('day_of_data_capture')
@@ -498,9 +505,11 @@ class BasicPreprocessor:
             .drop('transactions')
         )
 
+        # hits_df.show(n=2)
         # users_df.show(n=3)
-        self.save_raw_data(users_df, sessions_df, hits_df, transactions_df)
-
+        # self.save_raw_data(users_df, sessions_df, hits_df, transactions_df)
+        a = self.process_user_data(users_df, spark_session)
+        a.show(n=2)
         # hits_data = self.process_hits_data(hits_df)
         # return hits_df
         # return self.process_sessions_and_transactions_data(sessions_df, transactions_df)
