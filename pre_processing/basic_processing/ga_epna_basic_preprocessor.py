@@ -264,11 +264,10 @@ class BasicPreprocessor:
         return user_data
 
     def process_sessions_and_transactions_data(self, sessions_data, transactions_data):
-        sessions_data = sessions_data.drop('s_day_of_data_capture').withColumnRenamed(
-            's_client_id', 'client_id').withColumnRenamed('s_session_id', 'session_id')
+        sessions_data = sessions_data.drop('day_of_data_capture')
 
-        transactions_data = transactions_data.drop('t_day_of_data_capture', 'transaction_id').withColumnRenamed(
-            't_client_id', 'client_id').withColumnRenamed('t_session_id', 'session_id')
+        transactions_data = transactions_data.drop(
+            'day_of_data_capture', 'transaction_id')
 
         joined_data = sessions_data.join(
             transactions_data, on=['client_id', 'session_id'], how='outer')
@@ -361,6 +360,52 @@ class BasicPreprocessor:
 
         return after_json_parsing_df
 
+    def save_raw_data(self, user_data, session_data, hit_data, transaction_data):
+        save_options_ga_epnau_features_raw = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epnau_features_raw')
+        }
+        save_options_ga_epnas_features_raw = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epnas_features_raw')
+        }
+        save_options_ga_epnah_features_raw = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epnah_features_raw')
+        }
+        save_options_ga_epnat_features_raw = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epnat_features_raw')
+        }
+
+        (user_data
+            .write
+            .format('org.apache.spark.sql.cassandra')
+            .mode('append')
+            .options(**save_options_ga_epnau_features_raw)
+            .save())
+
+        (session_data
+            .write
+            .format('org.apache.spark.sql.cassandra')
+            .mode('append')
+            .options(**save_options_ga_epnas_features_raw)
+            .save())
+
+        (hit_data
+            .write
+            .format('org.apache.spark.sql.cassandra')
+            .mode('append')
+            .options(**save_options_ga_epnah_features_raw)
+            .save())
+
+        (transaction_data
+            .write
+            .format('org.apache.spark.sql.cassandra')
+            .mode('append')
+            .options(**save_options_ga_epnat_features_raw)
+            .save())
+
     def main(self):
 
         spark_session = self.get_spark_session()
@@ -438,37 +483,29 @@ class BasicPreprocessor:
 
         users_df = (
             processed_users_dict['result_df']
-            .withColumnRenamed('client_id', 'u_client_id')
-            .withColumnRenamed('day_of_data_capture', 'u_day_of_data_capture')
-            .withColumnRenamed('sessions', 'u_sessions'))
+        )
 
         sessions_df = (
             processed_sessions_dict['result_df']
-            .withColumnRenamed('client_id', 's_client_id')
-            .withColumnRenamed('day_of_data_capture', 's_day_of_data_capture')
-            .withColumnRenamed('session_id', 's_session_id'))
+        )
 
         hits_df = (
             processed_hits_dict['result_df']
-            .withColumnRenamed('client_id', 'h_client_id')
-            .withColumnRenamed('day_of_data_capture', 'h_day_of_data_capture')
-            .withColumnRenamed('session_id', 'h_session_id')
         )
 
         transactions_df = (
             processed_transactions_dict['result_df']
             .drop('transactions')
-            .withColumnRenamed('client_id', 't_client_id')
-            .withColumnRenamed('day_of_data_capture', 't_day_of_data_capture')
-            .withColumnRenamed('session_id', 't_session_id')
         )
+
+        # users_df.show(n=3)
+        self.save_raw_data(users_df, sessions_df, hits_df, transactions_df)
 
         # hits_data = self.process_hits_data(hits_df)
         # return hits_df
-        return self.process_sessions_and_transactions_data(sessions_df, transactions_df)
+        # return self.process_sessions_and_transactions_data(sessions_df, transactions_df)
 
 
 if __name__ == '__main__':
     preprocessor = BasicPreprocessor()
-    a = preprocessor.main()
-    a.show(n=5)
+    preprocessor.main()
