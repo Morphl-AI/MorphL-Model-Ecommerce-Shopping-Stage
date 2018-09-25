@@ -89,7 +89,7 @@ class CassandraPersistence:
 
         if report_type in self.type_3_set:
             session_id = data_dict['dimensions'][1]
-            hit_id = data_dict['dimensions'][3] + \
+            hit_id = data_dict['dimensions'][2] + \
                 '.' + str(data_dict['dimensions'][4])
             bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
                          session_id, hit_id, json_meta, json_data]
@@ -229,7 +229,7 @@ class GoogleAnalytics:
     # Get hit level data
     def store_hits(self):
         dimensions = [
-            'dimension1', 'dimension2', 'userType', 'shoppingStage', 'dateHourMinute'
+            'dimension1', 'dimension2', 'dimension3', 'userType', 'shoppingStage', 'dateHourMinute'
         ]
         metrics = ['timeOnPage', 'productListClicks',
                    'productListViews', 'productDetailViews']
