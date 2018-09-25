@@ -58,7 +58,7 @@ class BasicPreprocessor:
              },
             {'field_name': 'revenue_per_user',
              'original_name': 'ga:revenuePerUser',
-             'needs_conversion': False,
+             'needs_conversion': True,
              },
             {'field_name': 'transactions_per_user',
              'original_name': 'ga:transactionsPerUser',
@@ -85,7 +85,7 @@ class BasicPreprocessor:
              },
             {'field_name': 'transaction_revenue',
              'original_name': 'ga:transactionRevenue',
-             'needs_conversion': False,
+             'needs_conversion': True,
              },
             {'field_name': 'unique_purchases',
              'original_name': 'ga:uniquePurchases',
@@ -270,10 +270,11 @@ class BasicPreprocessor:
         transactions_data = transactions_data.drop('t_day_of_data_capture', 'transaction_id').withColumnRenamed(
             't_client_id', 'client_id').withColumnRenamed('t_session_id', 'session_id')
 
-        joined_data = transactions_data.join(
-            sessions_data, on=['client_id', 'session_id'], how='outer').na.fill(0)
+        joined_data = sessions_data.join(
+            transactions_data, on=['client_id', 'session_id'], how='outer')
 
-        final_data = joined_data.filter(joined_data.session_duration > 0.0)
+        final_data = joined_data.filter(
+            joined_data.session_duration > 0.0).na.fill(0)
 
         return final_data
 
@@ -456,16 +457,18 @@ class BasicPreprocessor:
 
         transactions_df = (
             processed_transactions_dict['result_df']
+            .drop('transactions')
             .withColumnRenamed('client_id', 't_client_id')
             .withColumnRenamed('day_of_data_capture', 't_day_of_data_capture')
             .withColumnRenamed('session_id', 't_session_id')
         )
 
-        hits_data = self.process_hits_data(hits_df)
-
-        hits_data.head()
+        # hits_data = self.process_hits_data(hits_df)
+        # return hits_df
+        return self.process_sessions_and_transactions_data(sessions_df, transactions_df)
 
 
 if __name__ == '__main__':
     preprocessor = BasicPreprocessor()
-    preprocessor.main()
+    a = preprocessor.main()
+    a.show(n=5)
