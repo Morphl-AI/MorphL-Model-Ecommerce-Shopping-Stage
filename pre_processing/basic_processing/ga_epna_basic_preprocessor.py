@@ -284,8 +284,25 @@ class BasicPreprocessor:
 
         return final_data
 
-    def process_hits_data(self, hits_data):
-        return hits_data.toPandas()
+    def process_hits_data(self, hits_data, spark_session):
+
+        cart_and_transaction_df = hits_data[(
+            hits_data['shopping_stage'] == 'CART_ABANDONMENT') | (hits_data['shopping_stage'] == 'TRANSACTION')].dropDuplicates()
+
+        product_view_df = hits_data[hits_data['shopping_stage']
+                                    == 'PRODUCT_VIEW'].dropDuplicates()
+
+        cart_and_transaction_df.createOrReplaceTempView('cart_and_transaction')
+        product_view_df.createOrReplaceTempView('product_view')
+
+        clean_product_view_sql = 'SELECT * FROM product_view WHERE session_id NOT IN (SELECT session_id FROM cart_and_transaction)'
+
+        cleaned_product_view = spark_session.sql(clean_product_view_sql)
+
+        no_activity_df = hits_data[(
+            hits_data['shopping_stage'] == 'NO_SHOPPING_ACTIVITY')].dropDuplicates()
+
+        return cart_and_transaction_df.union(cleaned_product_view).union(no_activity_df)
 
     def get_spark_session(self):
         spark_session = (
@@ -505,14 +522,7 @@ class BasicPreprocessor:
             .drop('transactions')
         )
 
-        # hits_df.show(n=2)
-        # users_df.show(n=3)
-        # self.save_raw_data(users_df, sessions_df, hits_df, transactions_df)
-        a = self.process_user_data(users_df, spark_session)
-        a.show(n=2)
-        # hits_data = self.process_hits_data(hits_df)
-        # return hits_df
-        # return self.process_sessions_and_transactions_data(sessions_df, transactions_df)
+        self.save_raw_data(users_df, sessions_df, hits_df, transactions_df)
 
 
 if __name__ == '__main__':
