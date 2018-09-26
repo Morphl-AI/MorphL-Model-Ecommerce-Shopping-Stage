@@ -94,3 +94,13 @@ CREATE TABLE morphl.ga_epnat_features_raw(
   sessions_to_transaction double,
   PRIMARY KEY ((client_id), day_of_data_capture, session_id, transaction_id)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC)
+
+
+CREATE TABLE morphl.ga_epna_config_parameters (
+  morphl_component_name text,
+  parameter_name text,
+  parameter_value text,
+  PRIMARY KEY ((morphl_component_name, parameter_name))
+);
+
+INSERT INTO morphl.ga_epna_config_parameters (morphl_component_name,parameter_name,parameter_value)
