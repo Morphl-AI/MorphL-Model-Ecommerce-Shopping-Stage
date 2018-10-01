@@ -263,10 +263,18 @@ class BasicPreprocessor:
 
         user_data.createOrReplaceTempView('user_data')
 
-        groupe_by_client_id_sql = "SELECT client_id, device_category, SUM(sessions) OVER (PARTITION BY client_id) AS sessions, SUM(bounces) OVER (PARTITION BY client_id) AS bounces, SUM(revenue_per_user) OVER (PARTITION BY client_id) AS revenue_per_user, SUM(transactions_per_user) OVER (PARTITION BY client_id) AS transactions_per_user FROM user_data"
+        group_by_client_id_sql_parts = [
+            "SELECT client_id, device_category,",
+            "SUM(sessions) OVER (PARTITION BY client_id) AS sessions,",
+            "SUM(bounces) OVER (PARTITION BY client_id) AS bounces,",
+            "SUM(revenue_per_user) OVER (PARTITION BY client_id) AS revenue_per_user,",
+            "SUM(transactions_per_user) OVER (PARTITION BY client_id) AS transactions_per_user",
+            "FROM user_data"]
+
+        group_by_client_id_sql = ' '.join(group_by_client_id_sql_parts)
 
         grouped_by_client_id_df = spark_session.sql(
-            groupe_by_client_id_sql)
+            group_by_client_id_sql)
 
         return grouped_by_client_id_df
 
