@@ -264,12 +264,13 @@ class BasicPreprocessor:
         user_data.createOrReplaceTempView('user_data')
 
         group_by_client_id_sql_parts = [
-            "SELECT client_id, device_category,",
-            "SUM(sessions) OVER (PARTITION BY client_id) AS sessions,",
-            "SUM(bounces) OVER (PARTITION BY client_id) AS bounces,",
-            "SUM(revenue_per_user) OVER (PARTITION BY client_id) AS revenue_per_user,",
-            "SUM(transactions_per_user) OVER (PARTITION BY client_id) AS transactions_per_user",
-            "FROM user_data"]
+            "SELECT client_id, FIRST(device_category),",
+            "SUM(sessions)  AS sessions,",
+            "SUM(bounces)  AS bounces,",
+            "SUM(revenue_per_user)  AS revenue_per_user,",
+            "SUM(transactions_per_user)  AS transactions_per_user",
+            "FROM user_data",
+            "GROUP BY client_id "]
 
         group_by_client_id_sql = ' '.join(group_by_client_id_sql_parts)
 
@@ -559,7 +560,7 @@ class BasicPreprocessor:
 
         # self.save_raw_data(users_df, sessions_df, hits_df, transactions_df)
         a = self.process_data(users_df, sessions_df, hits_df, transactions_df)
-        a.toPandas().to_csv('final-final.csv')
+        a.toPandas().to_csv('final-final-final.csv')
 
 
 if __name__ == '__main__':
