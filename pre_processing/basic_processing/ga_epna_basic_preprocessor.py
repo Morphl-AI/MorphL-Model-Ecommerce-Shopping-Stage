@@ -430,16 +430,32 @@ class BasicPreprocessor:
             .options(**save_options_ga_epnat_features_raw)
             .save())
 
+    def process_data(self, user_data, session_data, hit_data, transaction_data):
+        spark_session = self.get_spark_session()
+
+        processed_user_data = self.process_user_data(user_data, spark_session)
+        processed_session_and_transaction_data = self.process_sessions_and_transactions_data(
+            session_data, transaction_data)
+        processed_hit_data = self.process_hits_data(hit_data, spark_session)
+
+        user_and_sessions_data = processed_user_data.join(
+            processed_session_and_transaction_data, on=['client_id'], how='inner').dropDuplicates()
+
+        final_join_data = processed_hit_data.join(user_and_sessions_data, on=[
+            'client_id', 'session_id'], how='inner').dropDuplicates()
+
+        return final_join_data.na.fill(0)
+
     def main(self):
 
         spark_session = self.get_spark_session()
 
-        ga_config_df = (
-            self.fetch_from_cassandra(
-                'ga_epna_config_parameters', spark_session)
-            .filter("morphl_component_name = 'ga_epna' AND parameter_name = 'days_worth_of_data_to_load'"))
+        # ga_config_df = (
+        #     self.fetch_from_cassandra(
+        #         'ga_epna_config_parameters', spark_session)
+        #     .filter("morphl_component_name = 'ga_epna' AND parameter_name = 'days_worth_of_data_to_load'"))
 
-        days_worth_of_data_to_load = int(ga_config_df.first().parameter_value)
+        # days_worth_of_data_to_load = int(ga_config_df.first().parameter_value)
 
         start_date = ((
             datetime.datetime(year=2018, month=7, day=2) -
@@ -522,7 +538,9 @@ class BasicPreprocessor:
             .drop('transactions')
         )
 
-        self.save_raw_data(users_df, sessions_df, hits_df, transactions_df)
+        # self.save_raw_data(users_df, sessions_df, hits_df, transactions_df)
+        a = self.process_data(users_df, sessions_df, hits_df, transactions_df)
+        a.toPandas().to_csv('final-final.csv')
 
 
 if __name__ == '__main__':
