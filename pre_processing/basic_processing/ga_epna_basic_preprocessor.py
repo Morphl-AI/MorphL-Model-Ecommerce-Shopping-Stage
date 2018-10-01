@@ -276,9 +276,12 @@ class BasicPreprocessor:
         grouped_by_client_id_df = spark_session.sql(
             group_by_client_id_sql)
 
-        return grouped_by_client_id_df
+        return grouped_by_client_id_df.repartition(32)
 
     def process_sessions_and_transactions_data(self, sessions_data, transactions_data):
+        sessions_data.cache()
+        transactions_data.cache()
+
         sessions_data = sessions_data.drop('day_of_data_capture')
 
         transactions_data = transactions_data.drop(
@@ -290,9 +293,11 @@ class BasicPreprocessor:
         final_data = joined_data.filter(
             joined_data.session_duration > 0.0).na.fill(0)
 
-        return final_data
+        return final_data.repartition(32)
 
     def process_hits_data(self, hits_data, spark_session):
+
+        hits_data.cache()
 
         cart_and_transaction_df = hits_data[(
             hits_data['shopping_stage'] == 'CART_ABANDONMENT') | (hits_data['shopping_stage'] == 'TRANSACTION')].dropDuplicates()
@@ -310,7 +315,7 @@ class BasicPreprocessor:
         no_activity_df = hits_data[(
             hits_data['shopping_stage'] == 'NO_SHOPPING_ACTIVITY')].dropDuplicates()
 
-        return cart_and_transaction_df.union(cleaned_product_view).union(no_activity_df)
+        return cart_and_transaction_df.union(cleaned_product_view).union(no_activity_df).repartition(32)
 
     def get_spark_session(self):
         spark_session = (
@@ -393,6 +398,12 @@ class BasicPreprocessor:
         return after_json_parsing_df
 
     def save_raw_data(self, user_data, session_data, hit_data, transaction_data):
+
+        user_data.cache()
+        session_data.cache()
+        hit_data.cache()
+        transaction_data.cache()
+
         save_options_ga_epnau_features_raw = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
             'table': ('ga_epnau_features_raw')
@@ -452,7 +463,7 @@ class BasicPreprocessor:
         final_join_data = processed_hit_data.join(user_and_sessions_data, on=[
             'client_id', 'session_id'], how='inner').dropDuplicates()
 
-        return final_join_data.na.fill(0)
+        return final_join_data.na.fill(0).repartition(32)
 
     def main(self):
 
