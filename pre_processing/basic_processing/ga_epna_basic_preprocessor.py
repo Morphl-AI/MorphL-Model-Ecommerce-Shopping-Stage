@@ -264,7 +264,8 @@ class BasicPreprocessor:
         user_data.createOrReplaceTempView('user_data')
 
         group_by_client_id_sql_parts = [
-            "SELECT client_id, FIRST(device_category),",
+            "SELECT client_id,",
+            "FIRST(device_category) as device_category,",
             "SUM(sessions)  AS sessions,",
             "SUM(bounces)  AS bounces,",
             "SUM(revenue_per_user)  AS revenue_per_user,",
@@ -465,21 +466,20 @@ class BasicPreprocessor:
             'client_id', 'session_id'], how='inner').dropDuplicates()
 
         return final_join_data.na.fill(0).repartition(32)
-
     def main(self):
 
         spark_session = self.get_spark_session()
 
-        ga_config_df = (
-            self.fetch_from_cassandra(
-                'ga_epna_config_parameters', spark_session)
-            .filter("morphl_component_name = 'ga_epna' AND parameter_name = 'days_worth_of_data_to_load'"))
+        # ga_config_df = (
+        #     self.fetch_from_cassandra(
+        #         'ga_epna_config_parameters', spark_session)
+        #     .filter("morphl_component_name = 'ga_epna' AND parameter_name = 'days_worth_of_data_to_load'"))
 
-        days_worth_of_data_to_load = int(ga_config_df.first().parameter_value)
+        # days_worth_of_data_to_load = int(ga_config_df.first().parameter_value)
 
         start_date = ((
-            datetime.datetime.now() -
-            datetime.timedelta(days=days_worth_of_data_to_load))
+            datetime.datetime(year=2018, month=7, day=2) -
+            datetime.timedelta(days=0))
             .strftime('%Y-%m-%d'))
 
         ga_epna_users_df = self.fetch_from_cassandra(
@@ -560,7 +560,8 @@ class BasicPreprocessor:
 
         # self.save_raw_data(users_df, sessions_df, hits_df, transactions_df)
         a = self.process_data(users_df, sessions_df, hits_df, transactions_df)
-        a.toPandas().to_csv('final-final-final.csv')
+
+        a.toPandas().to_csv('final_csv.csv', index=False)
 
 
 if __name__ == '__main__':
