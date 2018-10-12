@@ -466,6 +466,44 @@ class BasicPreprocessor:
             'client_id', 'session_id'], how='inner').dropDuplicates()
 
         return final_join_data.na.fill(0).repartition(32)
+
+    def deaggregate_sessions(self, data, spark_session):
+        select_data = data.select('client_id', 'session_id', 'hit_id')
+
+        select_data.cache()
+
+        select_data.createOrReplaceTempView('select_data')
+
+        sql_parts = [
+            "SELECT client_id,",
+            "session_id,",
+            "hit_id,"
+            "ingredient_1 + ingredient_2 AS sessions",
+            "FROM (SELECT",
+            "client_id, session_id, ingredient_1, hit_id,",
+            "CASE WHEN rownum = 1 THEN 0 ELSE 1 END as ingredient_2",
+            "FROM (SELECT",
+            "client_id, session_id, hit_id,"
+            "DENSE_RANK() OVER (PARTITION BY client_id ORDER BY session_id) - 1 AS ingredient_1,",
+            "ROW_NUMBER() OVER (PARTITION BY client_id, session_id ORDER BY hit_id) AS rownum",
+            "FROM select_data",
+            ') AS step_1',
+            ") AS step_2",
+            "ORDER BY client_id, session_id"
+        ]
+
+        sql = ' '.join(sql_parts)
+
+        deag_df = spark_session.sql(sql)
+
+        return deag_df
+
+    def deaggregate_data(self, data):
+        spark_session = self.get_spark_session()
+
+        deaggregated_sessions = self.deaggregate_sessions(data, spark_session)
+        # deaggregated_revenue_per_user = self.deaggregate_revenue_per_user(data, spark_session)
+
     def main(self):
 
         spark_session = self.get_spark_session()
