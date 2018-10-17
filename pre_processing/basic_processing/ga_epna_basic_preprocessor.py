@@ -589,53 +589,49 @@ class BasicPreprocessor:
         return deag_df
 
     def deaggregate_bounces(self, data, spark_session):
-        selected_data = data.select(
+        select_data = data.select(
             'client_id', 'session_id', 'hit_id', 'transactions')
 
-        selected_data.cache()
+        select_data.cache()
 
-        selected_data.createOrReplaceTempView('select_data')
+        select_data.createOrReplaceTempView('select_data')
 
         sql_parts = [
-            'SELECT',
-            'client_id,',
-            'session_id,',
-            'transactions,',
-            'hit_id,',
-            'COALESCE(LAG(ingredient_2) OVER (PARTITION BY client_id ORDER BY session_id), 0) AS bounces',
-            'FROM',
-            '(SELECT',
-            'client_id,',
-            'session_id,',
-            'transactions,',
-            'hit_id,',
-            'SUM(ingredient_1) OVER (PARTITION BY client_id ORDER BY session_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS ingredient_2'
-            'FROM',
-            '(SELECT',
-            'client_id,',
-            'session_id,',
-            'transactions,',
-            'hit_id,',
-            'CASE WHEN rownum = 1 THEN CASE WHEN transactions > 0 THEN 0 ELSE 1 END ELSE 0 END AS ingredient_1',
-            'FROM (SELECT client_id,',
-            'session_id,',
-            'transaction,',
-            'hit_id,',
-            'ROW_NUMBER() OVER (PARTITION BY client_id, session_id) ORDER BY hit_id AS rownum',
-            'FROM selected_data',
-            ') AS step_1',
-            ') AS step_2',
-            ') AS step_3',
-            'ORDER BY',
-            'client_id',
-            'session_id'
+            "SELECT",
+            "client_id,",
+            "session_id,",
+            "hit_id,",
+            "COALESCE(LAG(ingredient_2) OVER (PARTITION BY client_id ORDER BY session_id), 0) AS bounces",
+            "FROM (SELECT",
+            "client_id,",
+            "session_id,",
+            "hit_id,",
+            "SUM(ingredient_1) OVER (PARTITION BY client_id ORDER BY session_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS ingredient_2",
+            "FROM (SELECT",
+            "client_id,",
+            "session_id,",
+            "hit_id,",
+            "CASE WHEN rownum = 1 THEN CASE WHEN transactions > 0 THEN 0 ELSE 1 END ELSE 0 END AS ingredient_1",
+            "FROM (SELECT",
+            "client_id,",
+            "session_id,",
+            "transactions,",
+            "hit_id,",
+            "ROW_NUMBER() OVER (PARTITION BY client_id, session_id ORDER BY hit_id) AS rownum",
+            "FROM select_data",
+            ") AS step_1",
+            ") AS step_2",
+            ") AS step_3",
+            "ORDER BY",
+            "client_id,",
+            "session_id"
         ]
 
         sql = ' '.join(sql_parts)
 
-        agreg_df = spark_session.sql(sql)
+        deag_df = spark_session.sql(sql)
 
-        return agreg_df
+        return deag_df
 
     def deaggregate_data(self, data):
         spark_session = self.get_spark_session()
