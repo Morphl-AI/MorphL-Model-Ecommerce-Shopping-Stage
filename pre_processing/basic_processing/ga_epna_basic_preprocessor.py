@@ -639,8 +639,19 @@ class BasicPreprocessor:
         deaggregated_sessions = self.deaggregate_sessions(data, spark_session)
         deaggregated_revenue_per_user = self.deaggregate_revenue_per_user(
             data, spark_session)
+
         deaggregated_transactions_per_user = self.deaggregate_transactions_per_user(
             data, spark_session)
+        deaggregated_bounces = self.deaggregate_bounces(data, spark_session)
+
+        join_fields = ['client_id', 'session_id', 'hit_id']
+
+        return data.join(
+            deaggregated_sessions, on=join_fields, how='inner').join(
+                deaggregated_revenue_per_user, on=join_fields, how='inner').join(
+                    deaggregated_transactions_per_user, on=join_fields, how='inner').join(
+                        deaggregated_bounces, on=join_fields, how='inner'
+                    ).dropDuplicates()
 
     def main(self):
 
