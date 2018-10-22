@@ -103,7 +103,7 @@ CREATE TABLE morphl.ga_epnat_features_raw(
 
 CREATE TABLE morphl.ga_epna_preprocessed_features_basic(
   client_id text,
-  session_id date,
+  session_id text,
   hit_id text,
   day_of_data_capture date,
   sessions double,
@@ -112,6 +112,7 @@ CREATE TABLE morphl.ga_epna_preprocessed_features_basic(
   bounces double, 
   date_hour_minute text, 
   product_detail_views double, 
+  transactions double, 
   product_list_clicks double, 
   product_list_views double, 
   shopping_stage text,
