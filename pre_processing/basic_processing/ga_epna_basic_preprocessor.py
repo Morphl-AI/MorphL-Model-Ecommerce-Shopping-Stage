@@ -257,29 +257,6 @@ class BasicPreprocessor:
         return {'result_df': result_df,
                 'schema_as_list': schema_as_list}
 
-    def process_user_data(self, user_data, spark_session):
-
-        user_data.cache()
-
-        user_data.createOrReplaceTempView('user_data')
-
-        group_by_client_id_sql_parts = [
-            "SELECT client_id,",
-            "FIRST(device_category) as device_category,",
-            "SUM(sessions)  AS sessions,",
-            "SUM(bounces)  AS bounces,",
-            "SUM(revenue_per_user)  AS revenue_per_user,",
-            "SUM(transactions_per_user)  AS transactions_per_user",
-            "FROM user_data",
-            "GROUP BY client_id "]
-
-        group_by_client_id_sql = ' '.join(group_by_client_id_sql_parts)
-
-        grouped_by_client_id_df = spark_session.sql(
-            group_by_client_id_sql)
-
-        return grouped_by_client_id_df.repartition(32)
-
     def process_sessions_and_transactions_data(self, sessions_data, transactions_data):
         sessions_data.cache()
         transactions_data.cache()
@@ -469,12 +446,11 @@ class BasicPreprocessor:
     def process_data(self, user_data, session_data, hit_data, transaction_data):
         spark_session = self.get_spark_session()
 
-        processed_user_data = self.process_user_data(user_data, spark_session)
         processed_session_and_transaction_data = self.process_sessions_and_transactions_data(
             session_data, transaction_data)
         processed_hit_data = self.process_hits_data(hit_data, spark_session)
 
-        user_and_sessions_data = processed_user_data.join(
+        user_and_sessions_data = user_data.join(
             processed_session_and_transaction_data, on=['client_id'], how='inner').dropDuplicates()
 
         final_join_data = processed_hit_data.join(user_and_sessions_data, on=[
