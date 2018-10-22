@@ -130,8 +130,7 @@ CREATE TABLE morphl.ga_epna_preprocessed_features_basic(
   unique_page_views double,
   unique_purchases double,
   days_to_transaction double, 
-  sessions_to_transaction double
-
+  sessions_to_transaction double,
   PRIMARY KEY ((client_id), day_of_data_capture, session_id, hit_id)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC)
 
