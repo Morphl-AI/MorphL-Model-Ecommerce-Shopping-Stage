@@ -278,6 +278,8 @@ class BasicPreprocessor:
 
         hits_data.cache()
 
+        hits_data = hits_data.drop('day_of_data_capture')
+
         cart_and_transaction_df = hits_data[(
             hits_data['shopping_stage'] == 'CART_ABANDONMENT') | (hits_data['shopping_stage'] == 'TRANSACTION')].dropDuplicates()
 
