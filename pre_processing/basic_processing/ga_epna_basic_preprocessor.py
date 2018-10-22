@@ -455,10 +455,12 @@ class BasicPreprocessor:
         user_and_sessions_data = user_data.join(
             processed_session_and_transaction_data, on=['client_id'], how='inner').dropDuplicates()
 
-        final_join_data = processed_hit_data.join(user_and_sessions_data, on=[
-            'client_id', 'session_id'], how='inner').dropDuplicates()
+        aggregated_data = processed_hit_data.join(user_and_sessions_data, on=[
+            'client_id', 'session_id'], how='inner').dropDuplicates().na.fill(0)
 
-        return final_join_data.na.fill(0).repartition(32)
+        deaggregated_data = self.deaggregate_data(aggregated_data)
+
+        return deaggregated_data.repartition(32)
 
     def deaggregate_sessions(self, data, spark_session):
         select_data = data.select('client_id', 'session_id', 'hit_id')
@@ -743,6 +745,8 @@ class BasicPreprocessor:
 
         # self.save_raw_data(users_df, sessions_df, hits_df, transactions_df)
         a = self.process_data(users_df, sessions_df, hits_df, transactions_df)
+
+        self.save_basic_preprocessed_data(a)
 
         a.toPandas().to_csv('final_csv.csv', index=False)
 
