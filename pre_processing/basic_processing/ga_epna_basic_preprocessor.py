@@ -646,12 +646,15 @@ class BasicPreprocessor:
 
         join_fields = ['client_id', 'session_id', 'hit_id']
 
-        return data.join(
+        pruned_data = data.drop('sessions', 'bounces',
+                                'revenue_per_user', 'transactions_per_user')
+
+        return pruned_data.join(
             deaggregated_sessions, on=join_fields, how='inner').join(
                 deaggregated_revenue_per_user, on=join_fields, how='inner').join(
                     deaggregated_transactions_per_user, on=join_fields, how='inner').join(
                         deaggregated_bounces, on=join_fields, how='inner'
-                    ).dropDuplicates()
+        ).dropDuplicates().sort(join_fields)
 
     def main(self):
 
