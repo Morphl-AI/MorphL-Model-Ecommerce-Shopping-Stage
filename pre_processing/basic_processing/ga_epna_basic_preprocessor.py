@@ -451,6 +451,21 @@ class BasicPreprocessor:
             .options(**save_options_ga_epnat_features_raw)
             .save())
 
+    def save_basic_preprocessed_data(self, data):
+        data.cache()
+
+        save_options_ga_epna_preprocessed_features_basic = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epna_preprocessed_features_basic')
+        }
+
+        (data
+            .write
+            .format('org.apache.spark.sql.cassandra')
+            .mode('append')
+            .options(**save_options_ga_epna_preprocessed_features_basic)
+            .save())
+
     def process_data(self, user_data, session_data, hit_data, transaction_data):
         spark_session = self.get_spark_session()
 
