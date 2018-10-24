@@ -6,6 +6,7 @@ from pyspark.sql import functions as f, SparkSession
 class BasicPreprocessor:
 
     def __init__(self):
+
         self.MASTER_URL = 'local[*]'
         self.APPLICATION_NAME = 'preprocessor'
         self.DAY_AS_STR = getenv('DAY_AS_STR')
@@ -27,6 +28,7 @@ class BasicPreprocessor:
         self.init_baselines()
 
     def init_keys(self):
+
         primary_key = {}
 
         primary_key['ga_epnau_df'] = ['client_id', 'day_of_data_capture']
@@ -161,7 +163,26 @@ class BasicPreprocessor:
 
         self.field_baselines = field_baselines
 
+    def get_spark_session(self):
+
+        spark_session = (
+            SparkSession.builder
+            .appName(self.APPLICATION_NAME)
+            .master(self.MASTER_URL)
+            .config('spark.cassandra.connection.host', self.MORPHL_SERVER_IP_ADDRESS)
+            .config('spark.cassandra.auth.username', self.MORPHL_CASSANDRA_USERNAME)
+            .config('spark.cassandra.auth.password', self.MORPHL_CASSANDRA_PASSWORD)
+            .config('spark.sql.shuffle.partitions', 16)
+            .config('parquet.enable.summary-metadata', 'true')
+            .getOrCreate())
+
+        log4j = spark_session.sparkContext._jvm.org.apache.log4j
+        log4j.LogManager.getRootLogger().setLevel(log4j.Level.ERROR)
+
+        return spark_session
+
     def fetch_from_cassandra(self, c_table_name, spark_session):
+
         load_options = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
             'table': c_table_name,
@@ -187,11 +208,14 @@ class BasicPreprocessor:
                             json_data_metrics,
                             field_attributes,
                             schema_as_list):
+
         orig_meta_fields = json_meta_dimensions + json_meta_metrics
         orig_meta_fields_set = set(orig_meta_fields)
+
         for fname in schema_as_list:
             assert(field_attributes[fname]['original_name'] in orig_meta_fields_set), \
                 'The field {} is not part of the input record'
+
         data_values = json_data_dimensions + json_data_metrics[0].values
         zip_list_as_dict = dict(zip(orig_meta_fields, data_values))
         values = [
@@ -199,121 +223,6 @@ class BasicPreprocessor:
             for fname in schema_as_list]
 
         return values
-
-    def process(self, df, primary_key, field_baselines):
-        schema_as_list = [
-            fb['field_name']
-            for fb in field_baselines]
-
-        field_attributes = dict([
-            (fb['field_name'], fb)
-            for fb in field_baselines])
-
-        meta_fields = [
-            'raw_{}'.format(
-                fname) if field_attributes[fname]['needs_conversion'] else fname
-            for fname in schema_as_list]
-
-        schema_before_concat = [
-            '{}: string'.format(mf) for mf in meta_fields]
-
-        schema = ', '.join(schema_before_concat)
-
-        def zip_lists(json_meta_dimensions,
-                      json_meta_metrics,
-                      json_data_dimensions,
-                      json_data_metrics):
-            return self.zip_lists_full_args(json_meta_dimensions,
-                                            json_meta_metrics,
-                                            json_data_dimensions,
-                                            json_data_metrics,
-                                            field_attributes,
-                                            schema_as_list)
-
-        zip_lists_udf = f.udf(zip_lists, schema)
-
-        after_zip_lists_udf_df = (
-            df.withColumn('all_values', zip_lists_udf('jmeta_dimensions',
-                                                      'jmeta_metrics',
-                                                      'jdata_dimensions',
-                                                      'jdata_metrics')))
-
-        interim_fields_to_select = primary_key + ['all_values.*']
-
-        interim_df = after_zip_lists_udf_df.select(*interim_fields_to_select)
-
-        to_float_udf = f.udf(lambda s: float(s), 'float')
-
-        for fname in schema_as_list:
-            if field_attributes[fname]['needs_conversion']:
-                fname_raw = 'raw_{}'.format(fname)
-                interim_df = interim_df.withColumn(
-                    fname, to_float_udf(fname_raw))
-
-        fields_to_select = primary_key + schema_as_list
-
-        result_df = interim_df.select(*fields_to_select)
-
-        return {'result_df': result_df,
-                'schema_as_list': schema_as_list}
-
-    def process_sessions_and_transactions_data(self, sessions_data, transactions_data):
-        sessions_data.cache()
-        transactions_data.cache()
-
-        sessions_data = sessions_data.drop('day_of_data_capture')
-
-        transactions_data = transactions_data.drop(
-            'day_of_data_capture', 'transaction_id')
-
-        joined_data = sessions_data.join(
-            transactions_data, on=['client_id', 'session_id'], how='outer')
-
-        final_data = joined_data.filter(
-            joined_data.session_duration > 0.0).na.fill(0)
-
-        return final_data.repartition(32)
-
-    def process_hits_data(self, hits_data, spark_session):
-
-        hits_data.cache()
-
-        hits_data = hits_data.drop('day_of_data_capture')
-
-        cart_and_transaction_df = hits_data[(
-            hits_data['shopping_stage'] == 'CART_ABANDONMENT') | (hits_data['shopping_stage'] == 'TRANSACTION')].dropDuplicates()
-
-        product_view_df = hits_data[hits_data['shopping_stage']
-                                    == 'PRODUCT_VIEW'].dropDuplicates()
-
-        cart_and_transaction_df.createOrReplaceTempView('cart_and_transaction')
-        product_view_df.createOrReplaceTempView('product_view')
-
-        clean_product_view_sql = 'SELECT * FROM product_view WHERE session_id NOT IN (SELECT session_id FROM cart_and_transaction)'
-
-        cleaned_product_view = spark_session.sql(clean_product_view_sql)
-
-        no_activity_df = hits_data[(
-            hits_data['shopping_stage'] == 'NO_SHOPPING_ACTIVITY')].dropDuplicates()
-
-        return cart_and_transaction_df.union(cleaned_product_view).union(no_activity_df).repartition(32)
-
-    def get_spark_session(self):
-        spark_session = (
-            SparkSession.builder
-            .appName(self.APPLICATION_NAME)
-            .master(self.MASTER_URL)
-            .config('spark.cassandra.connection.host', self.MORPHL_SERVER_IP_ADDRESS)
-            .config('spark.cassandra.auth.username', self.MORPHL_CASSANDRA_USERNAME)
-            .config('spark.cassandra.auth.password', self.MORPHL_CASSANDRA_PASSWORD)
-            .config('spark.sql.shuffle.partitions', 16)
-            .config('parquet.enable.summary-metadata', 'true')
-            .getOrCreate())
-
-        log4j = spark_session.sparkContext._jvm.org.apache.log4j
-        log4j.LogManager.getRootLogger().setLevel(log4j.Level.ERROR)
-
-        return spark_session
 
     def get_parsed_jsons(self, json_schemas, dataframes):
 
@@ -378,6 +287,63 @@ class BasicPreprocessor:
 
         return after_json_parsing_df
 
+    def process_json_data(self, df, primary_key, field_baselines):
+        schema_as_list = [
+            fb['field_name']
+            for fb in field_baselines]
+
+        field_attributes = dict([
+            (fb['field_name'], fb)
+            for fb in field_baselines])
+
+        meta_fields = [
+            'raw_{}'.format(
+                fname) if field_attributes[fname]['needs_conversion'] else fname
+            for fname in schema_as_list]
+
+        schema_before_concat = [
+            '{}: string'.format(mf) for mf in meta_fields]
+
+        schema = ', '.join(schema_before_concat)
+
+        def zip_lists(json_meta_dimensions,
+                      json_meta_metrics,
+                      json_data_dimensions,
+                      json_data_metrics):
+            return self.zip_lists_full_args(json_meta_dimensions,
+                                            json_meta_metrics,
+                                            json_data_dimensions,
+                                            json_data_metrics,
+                                            field_attributes,
+                                            schema_as_list)
+
+        zip_lists_udf = f.udf(zip_lists, schema)
+
+        after_zip_lists_udf_df = (
+            df.withColumn('all_values', zip_lists_udf('jmeta_dimensions',
+                                                      'jmeta_metrics',
+                                                      'jdata_dimensions',
+                                                      'jdata_metrics')))
+
+        interim_fields_to_select = primary_key + ['all_values.*']
+
+        interim_df = after_zip_lists_udf_df.select(*interim_fields_to_select)
+
+        to_float_udf = f.udf(lambda s: float(s), 'float')
+
+        for fname in schema_as_list:
+            if field_attributes[fname]['needs_conversion']:
+                fname_raw = 'raw_{}'.format(fname)
+                interim_df = interim_df.withColumn(
+                    fname, to_float_udf(fname_raw))
+
+        fields_to_select = primary_key + schema_as_list
+
+        result_df = interim_df.select(*fields_to_select)
+
+        return {'result_df': result_df,
+                'schema_as_list': schema_as_list}
+
     def save_raw_data(self, user_data, session_data, hit_data, transaction_data):
 
         user_data.cache()
@@ -430,37 +396,46 @@ class BasicPreprocessor:
             .options(**save_options_ga_epnat_features_raw)
             .save())
 
-    def save_basic_preprocessed_data(self, data):
-        data.cache()
+    def process_sessions_and_transactions_data(self, sessions_data, transactions_data):
+        sessions_data.cache()
+        transactions_data.cache()
 
-        save_options_ga_epna_preprocessed_features_basic = {
-            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
-            'table': ('ga_epna_preprocessed_features_basic')
-        }
+        sessions_data = sessions_data.drop('day_of_data_capture')
 
-        (data
-            .write
-            .format('org.apache.spark.sql.cassandra')
-            .mode('append')
-            .options(**save_options_ga_epna_preprocessed_features_basic)
-            .save())
+        transactions_data = transactions_data.drop(
+            'day_of_data_capture', 'transaction_id')
 
-    def process_data(self, user_data, session_data, hit_data, transaction_data):
-        spark_session = self.get_spark_session()
+        joined_data = sessions_data.join(
+            transactions_data, on=['client_id', 'session_id'], how='outer')
 
-        processed_session_and_transaction_data = self.process_sessions_and_transactions_data(
-            session_data, transaction_data)
-        processed_hit_data = self.process_hits_data(hit_data, spark_session)
+        final_data = joined_data.filter(
+            joined_data.session_duration > 0.0).na.fill(0)
 
-        user_and_sessions_data = user_data.join(
-            processed_session_and_transaction_data, on=['client_id'], how='inner').dropDuplicates()
+        return final_data.repartition(32)
 
-        aggregated_data = processed_hit_data.join(user_and_sessions_data, on=[
-            'client_id', 'session_id'], how='inner').dropDuplicates().na.fill(0)
+    def process_hits_data(self, hits_data, spark_session):
 
-        deaggregated_data = self.deaggregate_data(aggregated_data)
+        hits_data.cache()
 
-        return deaggregated_data.repartition(32)
+        hits_data = hits_data.drop('day_of_data_capture')
+
+        cart_and_transaction_df = hits_data[(
+            hits_data['shopping_stage'] == 'CART_ABANDONMENT') | (hits_data['shopping_stage'] == 'TRANSACTION')].dropDuplicates()
+
+        product_view_df = hits_data[hits_data['shopping_stage']
+                                    == 'PRODUCT_VIEW'].dropDuplicates()
+
+        cart_and_transaction_df.createOrReplaceTempView('cart_and_transaction')
+        product_view_df.createOrReplaceTempView('product_view')
+
+        clean_product_view_sql = 'SELECT * FROM product_view WHERE session_id NOT IN (SELECT session_id FROM cart_and_transaction)'
+
+        cleaned_product_view = spark_session.sql(clean_product_view_sql)
+
+        no_activity_df = hits_data[(
+            hits_data['shopping_stage'] == 'NO_SHOPPING_ACTIVITY')].dropDuplicates()
+
+        return cart_and_transaction_df.union(cleaned_product_view).union(no_activity_df).repartition(32)
 
     def deaggregate_sessions(self, data, spark_session):
         select_data = data.select('client_id', 'session_id', 'hit_id')
@@ -651,6 +626,38 @@ class BasicPreprocessor:
                         deaggregated_bounces, on=join_fields, how='inner'
         ).dropDuplicates().sort(join_fields)
 
+    def process_data(self, user_data, session_data, hit_data, transaction_data):
+        spark_session = self.get_spark_session()
+
+        processed_session_and_transaction_data = self.process_sessions_and_transactions_data(
+            session_data, transaction_data)
+        processed_hit_data = self.process_hits_data(hit_data, spark_session)
+
+        user_and_sessions_data = user_data.join(
+            processed_session_and_transaction_data, on=['client_id'], how='inner').dropDuplicates()
+
+        aggregated_data = processed_hit_data.join(user_and_sessions_data, on=[
+            'client_id', 'session_id'], how='inner').dropDuplicates().na.fill(0)
+
+        deaggregated_data = self.deaggregate_data(aggregated_data)
+
+        return deaggregated_data.repartition(32)
+
+    def save_basic_preprocessed_data_to_cassandra(self, data):
+        data.cache()
+
+        save_options_ga_epna_preprocessed_features_basic = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epna_preprocessed_features_basic')
+        }
+
+        (data
+            .write
+            .format('org.apache.spark.sql.cassandra')
+            .mode('append')
+            .options(**save_options_ga_epna_preprocessed_features_basic)
+            .save())
+
     def main(self):
 
         spark_session = self.get_spark_session()
@@ -708,21 +715,21 @@ class BasicPreprocessor:
 
         after_json_parsing_df = self.get_parsed_jsons(json_schemas, dataframes)
 
-        processed_users_dict = self.process(after_json_parsing_df['ga_epnau_df'],
-                                            self.primary_key['ga_epnau_df'],
-                                            self.field_baselines['ga_epnau_df'])
+        processed_users_dict = self.process_json_data(after_json_parsing_df['ga_epnau_df'],
+                                                      self.primary_key['ga_epnau_df'],
+                                                      self.field_baselines['ga_epnau_df'])
 
-        processed_sessions_dict = self.process(after_json_parsing_df['ga_epnas_df'],
-                                               self.primary_key['ga_epnas_df'],
-                                               self.field_baselines['ga_epnas_df'])
+        processed_sessions_dict = self.process_json_data(after_json_parsing_df['ga_epnas_df'],
+                                                         self.primary_key['ga_epnas_df'],
+                                                         self.field_baselines['ga_epnas_df'])
 
-        processed_hits_dict = self.process(after_json_parsing_df['ga_epnah_df'],
-                                           self.primary_key['ga_epnah_df'],
-                                           self.field_baselines['ga_epnah_df'])
+        processed_hits_dict = self.process_json_data(after_json_parsing_df['ga_epnah_df'],
+                                                     self.primary_key['ga_epnah_df'],
+                                                     self.field_baselines['ga_epnah_df'])
 
-        processed_transactions_dict = self.process(after_json_parsing_df['ga_epnat_df'],
-                                                   self.primary_key['ga_epnat_df'],
-                                                   self.field_baselines['ga_epnat_df'])
+        processed_transactions_dict = self.process_json_data(after_json_parsing_df['ga_epnat_df'],
+                                                             self.primary_key['ga_epnat_df'],
+                                                             self.field_baselines['ga_epnat_df'])
 
         users_df = (
             processed_users_dict['result_df']
@@ -745,7 +752,7 @@ class BasicPreprocessor:
         processed_data = self.process_data(
             users_df, sessions_df, hits_df, transactions_df)
 
-        self.save_basic_preprocessed_data(processed_data)
+        self.save_basic_preprocessed_data_to_cassandra(processed_data)
 
 
 if __name__ == '__main__':
