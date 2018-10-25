@@ -752,6 +752,8 @@ class BasicPreprocessor:
         processed_data = self.process_data(
             users_df, sessions_df, hits_df, transactions_df)
 
+        processed_data.write.parquet(self.HDFS_DIR_TRAINING)
+
         self.save_basic_preprocessed_data_to_cassandra(processed_data)
 
 
