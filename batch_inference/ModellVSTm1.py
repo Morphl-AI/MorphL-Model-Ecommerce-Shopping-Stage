@@ -79,40 +79,6 @@ class ModelLSTM_V1(nn.Module):
 
         print("Finished loading model")
 
-    def npForward(self, x):
-        trInput = self.getTrData(x)
-        trResult = self.forward(trInput)
-        npResult = self.getNpData(trResult)
-        return npResult
-
-    def onModelSave(self):
-        return self.hyperParameters
-
-    def onModelLoad(self, state):
-        if len(self.hyperParameters.keys()) != len(state.keys()):
-            return False
-
-        for key in state:
-            if not key in self.hyperParameters:
-                return False
-
-            if not state[key] == self.hyperParameters[key]:
-                return False
-
-        return True
-
-    def getTrainableParameters(self):
-        return list(filter(lambda p: p.requires_grad, self.parameters()))
-
-    def loadWeights(self, path):
-        self.loadModel(path, stateKeys=["weights", "model_state"])
-
-    def maybeCpu(self, x):
-        return x.cpu() if tr.cuda.is_available() and hasattr(x, "cpu") else x
-
-    def maybeCuda(self, x):
-        return x.cuda() if tr.cuda.is_available() and hasattr(x, "cuda") else x
-
     def getNpData(self, results):
         npResults = None
         if results is None:
@@ -133,6 +99,12 @@ class ModelLSTM_V1(nn.Module):
         else:
             assert False, "Got type %s" % (type(results))
         return npResults
+
+    def maybeCpu(self, x):
+        return x.cpu() if tr.cuda.is_available() and hasattr(x, "cpu") else x
+
+    def maybeCuda(self, x):
+        return x.cuda() if tr.cuda.is_available() and hasattr(x, "cuda") else x
 
     def getTrData(self, data):
         trData = None
@@ -162,6 +134,34 @@ class ModelLSTM_V1(nn.Module):
             if param.requires_grad:
                 numTrainable += npParamCount
         return numParams, numTrainable
+
+    def npForward(self, x):
+        trInput = self.getTrData(x)
+        trResult = self.forward(trInput)
+        npResult = self.getNpData(trResult)
+        return npResult
+
+    def onModelSave(self):
+        return self.hyperParameters
+
+    def onModelLoad(self, state):
+        if len(self.hyperParameters.keys()) != len(state.keys()):
+            return False
+
+        for key in state:
+            if not key in self.hyperParameters:
+                return False
+
+            if not state[key] == self.hyperParameters[key]:
+                return False
+
+        return True
+
+    def getTrainableParameters(self):
+        return list(filter(lambda p: p.requires_grad, self.parameters()))
+
+    def loadWeights(self, path):
+        self.loadModel(path, stateKeys=["weights", "model_state"])
 
     def forward(self, trInputs):
         # print(["%s=>%s" % (x, trInputs[x].shape) for x in trInputs])
