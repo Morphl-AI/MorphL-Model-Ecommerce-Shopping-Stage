@@ -9,6 +9,13 @@ CREATE TABLE morphl.ga_epna_users (
   PRIMARY KEY ((client_id), day_of_data_capture)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
+CREATE TABLE morph.ga_epna_users_extra (
+  client_id text,
+  day_of_data_capture date,
+  json_meta text,
+  json_data text,
+  PRIMARY KEY ((client_id), day_of_data_capture)
+) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
 CREATE TABLE morphl.ga_epna_sessions (
   client_id text,
@@ -19,6 +26,15 @@ CREATE TABLE morphl.ga_epna_sessions (
   PRIMARY KEY ((client_id), day_of_data_capture, session_id)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
+CREATE TABLE morphl.ga_epna_extra_sessions (
+    client_id text,
+    day_of_data_capture date,
+    session_id text,
+    shopping_stage text,
+    json_data text,
+    json_meta text,
+    PRIMARY KEY (client_id, day_of_data_capture, session_id, shopping_stage)
+) WITH CLUSTERING ORDER BY (day_of_data_capture DESC, session_id ASC, shopping_stage ASC)
 
 CREATE TABLE morphl.ga_epna_hits (
   client_id text,
