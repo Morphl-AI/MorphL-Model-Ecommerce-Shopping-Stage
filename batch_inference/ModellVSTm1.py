@@ -8,13 +8,17 @@ from collections import OrderedDict
 device = tr.device("cuda") if tr.cuda.is_available() else tr.device("cpu")
 
 
-class ModelLSTM_V1(NeuralNetworkPyTorch):
-    def __init__(self, inputShape, outputShape, **kwargs):
+class ModelLSTM_V1(nn.Module):
+    def __init__(self, inputShape, outputShape, hyperParameters={}, **kwargs):
         super().__init__(**kwargs)
 
-        self.appendPreviousOutput = kwargs["hyperParameters"]["appendPreviousOutput"]
-        self.outputType = kwargs["hyperParameters"]["outputType"]
-        baseNeurons = kwargs["hyperParameters"]["baseNeurons"]
+        assert type(hyperParameters) == dict
+
+        self.hyperParameters = hyperParameters
+
+        self.appendPreviousOutput = hyperParameters["appendPreviousOutput"]
+        self.outputType = hyperParameters["outputType"]
+        baseNeurons = hyperParameters["baseNeurons"]
         self.hidenShape2 = baseNeurons + int(inputShape[1]) + outputShape \
             if self.appendPreviousOutput else baseNeurons + int(inputShape[1])
 
@@ -26,10 +30,87 @@ class ModelLSTM_V1(NeuralNetworkPyTorch):
                              int(inputShape[0]), out_features=baseNeurons)
         self.fc2 = nn.Linear(in_features=baseNeurons, out_features=outputShape)
 
-    def maybeCpu(x):
+    def doLoadWeights(self, loadedState):
+        if not "weights" in loadedState and "params" in loadedState:
+            print(
+                "Warning: Depcrecated model, using \"params\" key instead of \"weights\".")
+            loadedState["weights"] = loadedState["params"]
+
+        assert "weights" in loadedState
+        params = loadedState["weights"]
+        loadedParams, _ = self.getNumParams(params)
+        trainableParams = self.getTrainableParameters()
+        thisParams, _ = self.getNumParams(trainableParams)
+        if loadedParams != thisParams:
+            raise Exception("Inconsistent parameters: %d vs %d." %
+                            (loadedParams, thisParams))
+
+        for i, item in enumerate(trainableParams):
+            if item.shape != params[i].shape:
+                raise Exception("Inconsistent parameters: %d vs %d." %
+                                (item.shape, params[i].shape))
+            with tr.no_grad():
+                item[:] = self.maybeCuda(params[i][:])
+            item.requires_grad_(True)
+        print("Succesfully loaded weights (%d parameters) " % (loadedParams))
+
+    def loadModel(self, path, stateKeys):
+        assert len(stateKeys) > 0
+        try:
+            loadedState = tr.load(path)
+        except Exception:
+            print("Exception raised while loading model with tr.load(). Forcing CPU load")
+            loadedState = tr.load(
+                path, map_location=lambda storage, loc: storage)
+
+        print("Loading model from %s" % (path))
+        if not "model_state" in loadedState:
+            print(
+                "Warning, no model state dictionary for this model (obsolete behaviour). Ignoring.")
+            loadedState["model_state"] = None
+
+        if not self.onModelLoad(loadedState["model_state"]):
+            loaded = loadedState["model_state"]
+            current = self.onModelSave()
+            raise Exception(
+                "Could not correclty load the model state loaded: %s vs. current: %s" % (loaded, current))
+
+        self.doLoadWeights(loadedState)
+
+        print("Finished loading model")
+
+    def npForward(self, x):
+        trInput = self.getTrData(x)
+        trResult = self.forward(trInput)
+        npResult = self.getNpData(trResult)
+        return npResult
+
+    def onModelSave(self):
+        return self.hyperParameters
+
+    def onModelLoad(self, state):
+        if len(self.hyperParameters.keys()) != len(state.keys()):
+            return False
+
+        for key in state:
+            if not key in self.hyperParameters:
+                return False
+
+            if not state[key] == self.hyperParameters[key]:
+                return False
+
+        return True
+
+    def getTrainableParameters(self):
+        return list(filter(lambda p: p.requires_grad, self.parameters()))
+
+    def loadWeights(self, path):
+        self.loadModel(path, stateKeys=["weights", "model_state"])
+
+    def maybeCpu(self, x):
         return x.cpu() if tr.cuda.is_available() and hasattr(x, "cpu") else x
 
-    def maybeCuda(x):
+    def maybeCuda(self, x):
         return x.cuda() if tr.cuda.is_available() and hasattr(x, "cuda") else x
 
     def getNpData(self, results):
@@ -73,7 +154,7 @@ class ModelLSTM_V1(NeuralNetworkPyTorch):
             trData = self.maybeCuda(data)
         return trData
 
-    def getNumParams(params):
+    def getNumParams(self, params):
         numParams, numTrainable = 0, 0
         for param in params:
             npParamCount = np.prod(param.data.shape)
