@@ -26,6 +26,62 @@ class ModelLSTM_V1(NeuralNetworkPyTorch):
                              int(inputShape[0]), out_features=baseNeurons)
         self.fc2 = nn.Linear(in_features=baseNeurons, out_features=outputShape)
 
+    def maybeCpu(x):
+        return x.cpu() if tr.cuda.is_available() and hasattr(x, "cpu") else x
+
+    def maybeCuda(x):
+        return x.cuda() if tr.cuda.is_available() and hasattr(x, "cuda") else x
+
+    def getNpData(self, results):
+        npResults = None
+        if results is None:
+            return None
+
+        if type(results) in (list, tuple):
+            npResults = []
+            for result in results:
+                npResult = self.getNpData(result)
+                npResults.append(npResult)
+        elif type(results) in (dict, OrderedDict):
+            npResults = {}
+            for key in results:
+                npResults[key] = self.getNpData(results[key])
+
+        elif type(results) == tr.Tensor:
+            npResults = self.maybeCpu(results.detach()).numpy()
+        else:
+            assert False, "Got type %s" % (type(results))
+        return npResults
+
+    def getTrData(self, data):
+        trData = None
+        if data is None:
+            return None
+
+        elif type(data) in (list, tuple):
+            trData = []
+            for item in data:
+                trItem = self.getTrData(item)
+                trData.append(trItem)
+        elif type(data) in (dict, OrderedDict):
+            trData = {}
+            for key in data:
+                trData[key] = self.getTrData(data[key])
+        elif type(data) is np.ndarray:
+            trData = self.maybeCuda(tr.from_numpy(data))
+        elif type(data) is tr.Tensor:
+            trData = self.maybeCuda(data)
+        return trData
+
+    def getNumParams(params):
+        numParams, numTrainable = 0, 0
+        for param in params:
+            npParamCount = np.prod(param.data.shape)
+            numParams += npParamCount
+            if param.requires_grad:
+                numTrainable += npParamCount
+        return numParams, numTrainable
+
     def forward(self, trInputs):
         # print(["%s=>%s" % (x, trInputs[x].shape) for x in trInputs])
         hiddens = self.computeHiddens(trInputs)
