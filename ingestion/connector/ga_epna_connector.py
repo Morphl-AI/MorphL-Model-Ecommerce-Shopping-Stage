@@ -275,7 +275,17 @@ class GoogleAnalytics:
         metrics = ['sessionDuration', 'pageviews', 'uniquePageviews', 'transactions', 'transactionRevenue',
                    'uniquePurchases', 'searchResultViews', 'searchUniques', 'searchDepth', 'searchRefinements']
 
-        return self.run_report_and_store('sessions', dimensions, metrics, user_segment)
+        dimensions_filters = {
+            "filters": [
+                {
+                    "dimensionName": "ga.shoppingStage",
+                    "operator": "IN_LIST",
+                    "expressions": ["ALL_VISITS", "PRODUCT_VIEW", "ADD_TO_CART", "CHECKOUT", "TRANSACTION"]
+                }
+            ]
+        }
+
+        return self.run_report_and_store('sessions', dimensions, metrics, user_segment, dimensions_filters)
 
     # Get sessions shopping stages
     def store_sessions_shopping_stages(self, user_segment):
