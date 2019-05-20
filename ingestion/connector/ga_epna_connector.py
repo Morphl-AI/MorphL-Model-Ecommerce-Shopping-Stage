@@ -56,6 +56,9 @@ class CassandraPersistence:
         for report_type in type_3_list:
             self.prep_stmts[report_type] = self.session.prepare(
                 template_for_type_3.format(report_type))
+        for report_type in type_4_list:
+            self.prep_stmts[report_type] = self.session.prepare(
+                template_for_type_4.format(report_type))
         for report_type in type_5_list:
             self.prep_stmts[report_type] = self.session.prepare(
                 template_for_type_5.format(report_type))
