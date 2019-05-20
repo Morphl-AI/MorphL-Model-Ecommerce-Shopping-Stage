@@ -175,7 +175,7 @@ class GoogleAnalytics:
         return [{'expression': 'ga:' + metric} for metric in metrics]
 
     # Make request to the GA reporting API and return paginated results.
-    def run_report_and_store(self, report_type, dimensions, metrics, dimensions_filters=None, metrics_filters=None):
+    def run_report_and_store(self, report_type, dimensions, metrics, user_segment, dimensions_filters=None, metrics_filters=None):
         """Queries the Analytics Reporting API V4 and stores the results in a datastore.
 
         Args:
@@ -194,8 +194,21 @@ class GoogleAnalytics:
             'pageSize': self.API_PAGE_SIZE,
         }
 
+        query_params['dimensionFilterClauses'] = [
+            {
+                "filters": [
+                    {
+                        "dimensionName": "ga:dimension8",
+                        "operator": "BEGINS_WITH",
+                        "expression": [user_segment]
+                    }
+                ]
+
+            }
+        ]
+
         if dimensions_filters is not None:
-            query_params['dimensionFilterClauses'] = dimensions_filters
+            query_params['dimensionFilterClauses'].append(dimensions_filters)
 
         if metrics_filters is not None:
             query_params['metricFilterClauses'] = metrics_filters
@@ -241,68 +254,72 @@ class GoogleAnalytics:
         return complete_responses_list
 
     # Get user level data
-    def store_users(self):
+    def store_users(self, user_segment):
         dimensions = ['dimension1', 'deviceCategory']
         metrics = ['sessions', 'bounces',
                    'revenuePerUser', 'transactionsPerUser']
 
-        return self.run_report_and_store('users', dimensions, metrics)
+        return self.run_report_and_store('users', dimensions, metrics, user_segment)
 
     # Get user device branding data
-    def store_users_mobile_brand(self):
+    def store_users_mobile_brand(self, user_segment):
         dimensions = ['dimension1', 'mobileDeviceBranding']
         metrics = ['sessions']
 
-        return self.run_report_and_store('users_mobile_brand', dimensions, metrics)
+        return self.run_report_and_store('users_mobile_brand', dimensions, metrics, user_segment)
 
     # Get session level data
-    def store_sessions(self):
+    def store_sessions(self, user_segment):
         dimensions = ['dimension1', 'dimension2', 'searchUsed',
                       'daysSinceLastSession']
         metrics = ['sessionDuration', 'pageviews', 'uniquePageviews', 'transactions', 'transactionRevenue',
                    'uniquePurchases', 'searchResultViews', 'searchUniques', 'searchDepth', 'searchRefinements']
 
-        return self.run_report_and_store('sessions', dimensions, metrics)
+        return self.run_report_and_store('sessions', dimensions, metrics, user_segment)
 
     # Get sessions shopping stages
-    def store_sessions_shopping_stages(self):
+    def store_sessions_shopping_stages(self, user_segment):
         dimensions = ['dimension1', 'dimension2', 'shoppingStage']
         metrics = ['pageviews']
 
-        return self.run_report_and_store('sessions_shopping_stages', dimensions, metrics)
+        return self.run_report_and_store('sessions_shopping_stages', dimensions, metrics, user_segment)
 
     # Get hit level data
-    def store_hits(self):
+    def store_hits(self, user_segment):
         dimensions = [
             'dimension1', 'dimension2', 'dimension3', 'userType', 'shoppingStage', 'dateHourMinute'
         ]
         metrics = ['timeOnPage', 'productListClicks',
                    'productListViews', 'productDetailViews']
 
-        return self.run_report_and_store('hits', dimensions, metrics)
+        return self.run_report_and_store('hits', dimensions, metrics, user_segment)
 
-    def store_transactions(self):
+    def store_transactions(self, user_segment):
         dimensions = ['dimension1', 'dimension2', 'transactionId', 'daysToTransaction',
                       'sessionsToTransaction']
 
         metrics = ['transactions']
 
-        return self.run_report_and_store('transactions', dimensions, metrics)
+        return self.run_report_and_store('transactions', dimensions, metrics, user_segment)
 
     def run(self):
         self.authenticate()
-        self.store_users()
-        sleep(1)
-        self.store_users_mobile_brand()
-        sleep(1)
-        self.store_sessions()
-        sleep(1)
-        self.store_sessions_shopping_stages()
-        sleep(1)
-        self.store_hits()
-        sleep(1)
-        self.store_transactions()
-        sleep(1)
+
+        for i in range(1, 10):
+            user_segment = 'GA' + str(i)
+
+            self.store_users(user_segment)
+            sleep(1)
+            self.store_users_mobile_brand(user_segment)
+            sleep(1)
+            self.store_sessions(user_segment)
+            sleep(1)
+            self.store_sessions_shopping_stages(user_segment)
+            sleep(1)
+            self.store_hits(user_segment)
+            sleep(1)
+            self.store_transactions(user_segment)
+            sleep(1)
 
 
 def main():
