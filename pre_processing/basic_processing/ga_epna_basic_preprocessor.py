@@ -390,9 +390,6 @@ class BasicPreprocessor:
         ga_epna_hits_df = self.fetch_from_cassandra(
             'ga_epna_hits', spark_session)
 
-        ga_epna_transactions_df = self.fetch_from_cassandra(
-            'ga_epna_transactions', spark_session)
-
         dataframes = {}
 
         dataframes['ga_epnau_df'] = (
@@ -407,10 +404,6 @@ class BasicPreprocessor:
             ga_epna_hits_df
             .filter("day_of_data_capture >= '{}'".format(start_date)))
 
-        dataframes['ga_epnat_df'] = (
-            ga_epna_transactions_df
-            .filter("day_of_data_capture >= '{}'".format(start_date)))
-
         json_schemas = {}
 
         json_schemas['ga_epnau_df'] = self.get_json_schemas(
@@ -419,8 +412,6 @@ class BasicPreprocessor:
             dataframes['ga_epnas_df'], spark_session)
         json_schemas['ga_epnah_df'] = self.get_json_schemas(
             dataframes['ga_epnah_df'], spark_session)
-        json_schemas['ga_epnat_df'] = self.get_json_schemas(
-            dataframes['ga_epnat_df'], spark_session)
 
         after_json_parsing_df = self.get_parsed_jsons(json_schemas, dataframes)
 
@@ -436,10 +427,6 @@ class BasicPreprocessor:
                                                      self.primary_key['ga_epnah_df'],
                                                      self.field_baselines['ga_epnah_df'])
 
-        processed_transactions_dict = self.process_json_data(after_json_parsing_df['ga_epnat_df'],
-                                                             self.primary_key['ga_epnat_df'],
-                                                             self.field_baselines['ga_epnat_df'])
-
         users_df = (
             processed_users_dict['result_df']
         )
@@ -452,14 +439,10 @@ class BasicPreprocessor:
             processed_hits_dict['result_df']
         )
 
-        transactions_df = (
-            processed_transactions_dict['result_df']
-            .drop('transactions')
-        )
+        self.save_raw_data(users_df, sessions_df, hits_df)
 
-        self.save_raw_data(users_df, sessions_df, hits_df, transactions_df)
         processed_data = self.process_data(
-            users_df, sessions_df, hits_df, transactions_df)
+            users_df, sessions_df, hits_df)
 
         processed_data.write.parquet(self.HDFS_DIR_TRAINING)
 
