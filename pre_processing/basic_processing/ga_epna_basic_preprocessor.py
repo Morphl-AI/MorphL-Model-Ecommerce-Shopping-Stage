@@ -36,8 +36,6 @@ class BasicPreprocessor:
                                       'day_of_data_capture', 'session_id']
         primary_key['ga_epnah_df'] = [
             'client_id', 'day_of_data_capture', 'session_id', 'hit_id']
-        primary_key['ga_epnat_df'] = ['client_id',
-                                      'day_of_data_capture', 'session_id', 'transaction_id']
 
         self.primary_key = primary_key
 
@@ -71,10 +69,6 @@ class BasicPreprocessor:
         field_baselines['ga_epnas_df'] = [
             {'field_name': 'session_duration',
              'original_name': 'ga:sessionDuration',
-             'needs_conversion': True,
-             },
-            {'field_name': 'page_views',
-             'original_name': 'ga:pageviews',
              'needs_conversion': True,
              },
             {'field_name': 'unique_page_views',
@@ -147,17 +141,6 @@ class BasicPreprocessor:
             {'field_name': 'date_hour_minute',
              'original_name': 'ga:dateHourMinute',
              'needs_conversion': False,
-             },
-        ]
-
-        field_baselines['ga_epnat_df'] = [
-            {'field_name': 'days_to_transaction',
-             'original_name': 'ga:daysToTransaction',
-             'needs_conversion': True,
-             },
-            {'field_name': 'sessions_to_transaction',
-             'original_name': 'ga:sessionsToTransaction',
-             'needs_conversion': True,
              },
         ]
 
