@@ -257,7 +257,7 @@ class GoogleAnalytics:
     def store_sessions(self, user_segment):
         dimensions = ['dimension1', 'dimension2', 'searchUsed',
                       'daysSinceLastSession']
-        metrics = ['sessionDuration', 'pageviews', 'uniquePageviews', 'transactions', 'transactionRevenue',
+        metrics = ['sessionDuration', 'uniquePageviews', 'transactions', 'transactionRevenue',
                    'uniquePurchases', 'searchResultViews', 'searchUniques', 'searchDepth', 'searchRefinements']
 
         dimensions_filters = {
