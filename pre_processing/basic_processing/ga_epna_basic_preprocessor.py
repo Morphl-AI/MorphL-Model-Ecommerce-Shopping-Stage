@@ -253,21 +253,6 @@ class BasicPreprocessor:
                     f.col('jdata.dimensions').alias('jdata_dimensions'),
                     f.col('jdata.metrics').alias('jdata_metrics')))
 
-        after_json_parsing_df['ga_epnat_df'] = (
-            dataframes['ga_epnat_df']
-            .withColumn('jmeta', f.from_json(
-                f.col('json_meta'), json_schemas['ga_epnat_df']['json_meta_schema']))
-            .withColumn('jdata', f.from_json(
-                f.col('json_data'), json_schemas['ga_epnat_df']['json_data_schema']))
-            .select(f.col('client_id'),
-                    f.col('day_of_data_capture'),
-                    f.col('session_id'),
-                    f.col('transaction_id'),
-                    f.col('jmeta.dimensions').alias('jmeta_dimensions'),
-                    f.col('jmeta.metrics').alias('jmeta_metrics'),
-                    f.col('jdata.dimensions').alias('jdata_dimensions'),
-                    f.col('jdata.metrics').alias('jdata_metrics')))
-
         return after_json_parsing_df
 
     def process_json_data(self, df, primary_key, field_baselines):
@@ -327,12 +312,11 @@ class BasicPreprocessor:
         return {'result_df': result_df,
                 'schema_as_list': schema_as_list}
 
-    def save_raw_data(self, user_data, session_data, hit_data, transaction_data):
+    def save_raw_data(self, user_data, session_data, hit_data):
 
         user_data.cache()
         session_data.cache()
         hit_data.cache()
-        transaction_data.cache()
 
         save_options_ga_epnau_features_raw = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
@@ -345,10 +329,6 @@ class BasicPreprocessor:
         save_options_ga_epnah_features_raw = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
             'table': ('ga_epnah_features_raw')
-        }
-        save_options_ga_epnat_features_raw = {
-            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
-            'table': ('ga_epnat_features_raw')
         }
 
         (user_data
@@ -371,260 +351,6 @@ class BasicPreprocessor:
             .mode('append')
             .options(**save_options_ga_epnah_features_raw)
             .save())
-
-        (transaction_data
-            .write
-            .format('org.apache.spark.sql.cassandra')
-            .mode('append')
-            .options(**save_options_ga_epnat_features_raw)
-            .save())
-
-    def process_sessions_and_transactions_data(self, sessions_data, transactions_data):
-        sessions_data.cache()
-        transactions_data.cache()
-
-        sessions_data = sessions_data.drop('day_of_data_capture')
-
-        transactions_data = transactions_data.drop(
-            'day_of_data_capture', 'transaction_id')
-
-        joined_data = sessions_data.join(
-            transactions_data, on=['client_id', 'session_id'], how='outer')
-
-        final_data = joined_data.filter(
-            joined_data.session_duration > 0.0).na.fill(0)
-
-        return final_data.repartition(32)
-
-    def process_hits_data(self, hits_data, spark_session):
-
-        hits_data.cache()
-
-        hits_data = hits_data.drop('day_of_data_capture')
-
-        cart_and_transaction_df = hits_data[(
-            hits_data['shopping_stage'] == 'CART_ABANDONMENT') | (hits_data['shopping_stage'] == 'TRANSACTION')].dropDuplicates()
-
-        product_view_df = hits_data[hits_data['shopping_stage']
-                                    == 'PRODUCT_VIEW'].dropDuplicates()
-
-        cart_and_transaction_df.createOrReplaceTempView('cart_and_transaction')
-        product_view_df.createOrReplaceTempView('product_view')
-
-        clean_product_view_sql = 'SELECT * FROM product_view WHERE session_id NOT IN (SELECT session_id FROM cart_and_transaction)'
-
-        cleaned_product_view = spark_session.sql(clean_product_view_sql)
-
-        no_activity_df = hits_data[(
-            hits_data['shopping_stage'] == 'NO_SHOPPING_ACTIVITY')].dropDuplicates()
-
-        return cart_and_transaction_df.union(cleaned_product_view).union(no_activity_df).repartition(32)
-
-    def deaggregate_sessions(self, data, spark_session):
-        select_data = data.select('client_id', 'session_id', 'hit_id')
-
-        select_data.cache()
-
-        select_data.createOrReplaceTempView('select_data')
-
-        sql_parts = [
-            "SELECT client_id,",
-            "session_id,",
-            "hit_id,"
-            "ingredient_1 + ingredient_2 AS sessions",
-            "FROM (SELECT",
-            "client_id, session_id, ingredient_1, hit_id,",
-            "CASE WHEN rownum = 1 THEN 0 ELSE 1 END as ingredient_2",
-            "FROM (SELECT",
-            "client_id, session_id, hit_id,"
-            "DENSE_RANK() OVER (PARTITION BY client_id ORDER BY session_id) - 1 AS ingredient_1,",
-            "ROW_NUMBER() OVER (PARTITION BY client_id, session_id ORDER BY hit_id) AS rownum",
-            "FROM select_data",
-            ') AS step_1',
-            ") AS step_2",
-            "ORDER BY client_id, session_id"
-        ]
-
-        sql = ' '.join(sql_parts)
-
-        deag_df = spark_session.sql(sql)
-
-        return deag_df
-
-    def deaggregate_revenue_per_user(self, data, spark_session):
-        select_data = data.select(
-            'client_id', 'session_id', 'hit_id', 'transaction_revenue')
-
-        select_data.cache()
-
-        select_data.createOrReplaceTempView('select_data')
-
-        sql_parts = [
-            "SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "COALESCE(LAG(ingredient_2) OVER (PARTITION BY client_id ORDER BY session_id), 0) AS revenue_per_user",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "SUM(ingredient_1) OVER (PARTITION BY client_id ORDER BY session_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS ingredient_2",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "CASE WHEN rownum = 1 THEN transaction_revenue ELSE 0 END AS ingredient_1",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "transaction_revenue,",
-            "ROW_NUMBER() OVER (PARTITION BY client_id, session_id ORDER BY hit_id) AS rownum",
-            "FROM select_data",
-            ") AS step_1",
-            ") AS step_2",
-            ") AS step_3",
-            "ORDER BY",
-            "client_id,",
-            "session_id"
-        ]
-
-        sql = ' '.join(sql_parts)
-
-        deag_df = spark_session.sql(sql)
-
-        return deag_df
-
-    def deaggregate_transactions_per_user(self, data, spark_session):
-        select_data = data.select(
-            'client_id', 'session_id', 'hit_id', 'transactions')
-
-        select_data.cache()
-
-        select_data.createOrReplaceTempView('select_data')
-
-        sql_parts = [
-            "SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "COALESCE(LAG(ingredient_2) OVER (PARTITION BY client_id ORDER BY session_id), 0) AS transactions_per_user",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "SUM(ingredient_1) OVER (PARTITION BY client_id ORDER BY session_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS ingredient_2",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "CASE WHEN rownum = 1 THEN transactions ELSE 0 END AS ingredient_1",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "transactions,",
-            "ROW_NUMBER() OVER (PARTITION BY client_id, session_id ORDER BY hit_id) AS rownum",
-            "FROM select_data",
-            ") AS step_1",
-            ") AS step_2",
-            ") AS step_3",
-            "ORDER BY",
-            "client_id,",
-            "session_id"
-        ]
-
-        sql = ' '.join(sql_parts)
-
-        deag_df = spark_session.sql(sql)
-
-        return deag_df
-
-    def deaggregate_bounces(self, data, spark_session):
-        select_data = data.select(
-            'client_id', 'session_id', 'hit_id', 'transactions')
-
-        select_data.cache()
-
-        select_data.createOrReplaceTempView('select_data')
-
-        sql_parts = [
-            "SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "COALESCE(LAG(ingredient_2) OVER (PARTITION BY client_id ORDER BY session_id), 0) AS bounces",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "SUM(ingredient_1) OVER (PARTITION BY client_id ORDER BY session_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS ingredient_2",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "CASE WHEN rownum = 1 THEN CASE WHEN transactions > 0 THEN 0 ELSE 1 END ELSE 0 END AS ingredient_1",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "transactions,",
-            "hit_id,",
-            "ROW_NUMBER() OVER (PARTITION BY client_id, session_id ORDER BY hit_id) AS rownum",
-            "FROM select_data",
-            ") AS step_1",
-            ") AS step_2",
-            ") AS step_3",
-            "ORDER BY",
-            "client_id,",
-            "session_id"
-        ]
-
-        sql = ' '.join(sql_parts)
-
-        deag_df = spark_session.sql(sql)
-
-        return deag_df
-
-    def deaggregate_data(self, data):
-        spark_session = self.get_spark_session()
-
-        deaggregated_sessions = self.deaggregate_sessions(data, spark_session)
-        deaggregated_revenue_per_user = self.deaggregate_revenue_per_user(
-            data, spark_session)
-
-        deaggregated_transactions_per_user = self.deaggregate_transactions_per_user(
-            data, spark_session)
-        deaggregated_bounces = self.deaggregate_bounces(data, spark_session)
-
-        join_fields = ['client_id', 'session_id', 'hit_id']
-
-        pruned_data = data.drop('sessions', 'bounces',
-                                'revenue_per_user', 'transactions_per_user')
-
-        return pruned_data.join(
-            deaggregated_sessions, on=join_fields, how='inner').join(
-                deaggregated_revenue_per_user, on=join_fields, how='inner').join(
-                    deaggregated_transactions_per_user, on=join_fields, how='inner').join(
-                        deaggregated_bounces, on=join_fields, how='inner'
-        ).dropDuplicates().sort(join_fields)
-
-    def process_data(self, user_data, session_data, hit_data, transaction_data):
-        spark_session = self.get_spark_session()
-
-        processed_session_and_transaction_data = self.process_sessions_and_transactions_data(
-            session_data, transaction_data)
-        processed_hit_data = self.process_hits_data(hit_data, spark_session)
-
-        user_and_sessions_data = user_data.join(
-            processed_session_and_transaction_data, on=['client_id'], how='inner').dropDuplicates()
-
-        aggregated_data = processed_hit_data.join(user_and_sessions_data, on=[
-            'client_id', 'session_id'], how='inner').dropDuplicates().na.fill(0)
-
-        deaggregated_data = self.deaggregate_data(aggregated_data)
-
-        return deaggregated_data.repartition(32)
 
     def save_basic_preprocessed_data_to_cassandra(self, data):
         data.cache()
