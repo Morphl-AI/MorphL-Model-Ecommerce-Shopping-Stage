@@ -9,10 +9,10 @@ CREATE TABLE morphl.ga_epna_users (
   PRIMARY KEY ((client_id), day_of_data_capture)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
-CREATE TABLE morph.ga_epna_users_mobile_brand (
+CREATE TABLE morphl.ga_epna_users_mobile_brand (
   client_id text,
   day_of_data_capture date,
-  mobile_device_branding text
+  mobile_device_branding text,
   PRIMARY KEY ((client_id), day_of_data_capture)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
@@ -31,7 +31,7 @@ CREATE TABLE morphl.ga_epna_sessions_shopping_stages (
     session_id text,
     shopping_stage text,
     PRIMARY KEY ((client_id), day_of_data_capture, session_id)
-) WITH CLUSTERING ORDER BY (day_of_data_capture DESC, session_id ASC)
+) WITH CLUSTERING ORDER BY (day_of_data_capture DESC, session_id ASC);
 
 CREATE TABLE morphl.ga_epna_hits (
   client_id text,
@@ -52,7 +52,7 @@ CREATE TABLE morphl.ga_epnau_features_raw (
     revenue_per_user double,
     transactions_per_user double,
     PRIMARY KEY ((client_id), day_of_data_capture)
-) WITH CLUSTERING ORDER BY (day_of_data_capture DESC)
+) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
 CREATE TABLE morphl.ga_epnas_features_raw(
   client_id text,
@@ -71,7 +71,7 @@ CREATE TABLE morphl.ga_epnas_features_raw(
   search_depth double,
   search_refinements double,
   PRIMARY KEY ((client_id), day_of_data_capture, session_id)
-) WITH CLUSTERING ORDER BY (day_of_data_capture DESC)
+) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
 
 CREATE TABLE morphl.ga_epnah_features_raw(
@@ -87,7 +87,7 @@ CREATE TABLE morphl.ga_epnah_features_raw(
   product_list_views double,
   product_detail_views double,
   PRIMARY KEY ((client_id), day_of_data_capture, session_id, hit_id)
-) WITH CLUSTERING ORDER BY (day_of_data_capture DESC)
+) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
 CREATE TABLE morphl.ga_epna_config_parameters (
   morphl_component_name text,

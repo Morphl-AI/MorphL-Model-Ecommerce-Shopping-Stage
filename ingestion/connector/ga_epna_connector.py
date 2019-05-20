@@ -182,7 +182,7 @@ class GoogleAnalytics:
                     {
                         "dimensionName": "ga:dimension8",
                         "operator": "BEGINS_WITH",
-                        "expression": [user_segment]
+                        "expressions": [user_segment]
                     }
                 ]
 
@@ -260,7 +260,7 @@ class GoogleAnalytics:
         dimensions_filters = {
             "filters": [
                 {
-                    "dimensionName": "ga.shoppingStage",
+                    "dimensionName": "ga:shoppingStage",
                     "operator": "IN_LIST",
                     "expressions": ["ALL_VISITS", "PRODUCT_VIEW", "ADD_TO_CART", "CHECKOUT", "TRANSACTION"]
                 }
