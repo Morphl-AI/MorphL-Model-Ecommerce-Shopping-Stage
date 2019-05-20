@@ -40,14 +40,12 @@ class CassandraPersistence:
         type_3_list = ['sessions']
         type_4_list = ['sessions_shopping_stages']
         type_5_list = ['hits']
-        type_6_list = ['transactions']
 
         template_for_type_1 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,json_meta,json_data) VALUES (?,?,?,?)'
         template_for_type_2 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,mobile_device_branding) VALUES (?,?,?)'
         template_for_type_3 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,json_meta,json_data) VALUES (?,?,?,?,?)'
         template_for_type_4 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,shopping_stage) VALUES (?,?,?,?)'
         template_for_type_5 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,hit_id,json_meta,json_data) VALUES (?,?,?,?,?,?)'
-        template_for_type_6 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,transaction_id,json_meta,json_data) VALUES (?,?,?,?,?,?)'
 
         for report_type in type_1_list:
             self.prep_stmts[report_type] = self.session.prepare(
@@ -61,16 +59,12 @@ class CassandraPersistence:
         for report_type in type_5_list:
             self.prep_stmts[report_type] = self.session.prepare(
                 template_for_type_5.format(report_type))
-        for report_type in type_6_list:
-            self.prep_stmts[report_type] = self.session.prepare(
-                template_for_type_6.format(report_type))
 
         self.type_1_set = set(type_1_list)
         self.type_2_set = set(type_2_list)
         self.type_3_set = set(type_3_list)
         self.type_4_set = set(type_4_list)
         self.type_5_set = set(type_5_list)
-        self.type_6_set = set(type_6_list)
 
     def persist_dict_record(self, report_type, meta_dict, data_dict):
         raw_cl_id = data_dict['dimensions'][0]
@@ -131,18 +125,6 @@ class CassandraPersistence:
                     'client_id': client_id,
                     'session_id': session_id,
                     'hit_id': hit_id}
-
-        if report_type in self.type_6_set:
-            session_id = data_dict['dimensions'][1]
-            transaction_id = data_dict['dimensions'][2]
-            bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
-                         session_id, transaction_id, json_meta, json_data]
-
-            return {'cassandra_future': self.session.execute_async(self.prep_stmts[report_type], bind_list, timeout=self.CASS_REQ_TIMEOUT),
-
-                    'client_id': client_id,
-                    'session_id': session_id,
-                    'transaction_id': transaction_id}
 
 
 class GoogleAnalytics:
@@ -304,14 +286,6 @@ class GoogleAnalytics:
 
         return self.run_report_and_store('hits', dimensions, metrics, user_segment)
 
-    def store_transactions(self, user_segment):
-        dimensions = ['dimension1', 'dimension2', 'transactionId', 'daysToTransaction',
-                      'sessionsToTransaction']
-
-        metrics = ['transactions']
-
-        return self.run_report_and_store('transactions', dimensions, metrics, user_segment)
-
     def run(self):
         self.authenticate()
 
@@ -327,8 +301,6 @@ class GoogleAnalytics:
             self.store_sessions_shopping_stages(user_segment)
             sleep(1)
             self.store_hits(user_segment)
-            sleep(1)
-            self.store_transactions(user_segment)
             sleep(1)
 
 
