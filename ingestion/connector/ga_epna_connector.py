@@ -292,11 +292,17 @@ class GoogleAnalytics:
     def run(self):
         self.authenticate()
         self.store_users()
+        sleep(1)
         self.store_users_mobile_brand()
+        sleep(1)
         self.store_sessions()
+        sleep(1)
         self.store_sessions_shopping_stages()
+        sleep(1)
         self.store_hits()
+        sleep(1)
         self.store_transactions()
+        sleep(1)
 
 
 def main():
