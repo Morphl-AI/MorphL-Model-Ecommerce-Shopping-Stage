@@ -352,20 +352,28 @@ class BasicPreprocessor:
 
         ids_with_stages = shopping_stages_df.select('client_id').distinct()
 
+        ids_with_stages.cache()
+
         filtered_users_df = (users_df.
                              drop('day_of_data_capture').
                              join(ids_with_stages, 'client_id', 'inner')
                              )
+
+        filtered_users_df.repartition(32)
 
         filtered_mobile_brand_df = (mobile_brand_df.
                                     drop('day_of_data_capture', 'sessions').
                                     join(ids_with_stages, 'client_id', 'inner')
                                     )
 
+        filtered_mobile_brand_df.repartition(32)
+
         filtered_hits_df = (hits_df.
                             drop('day_of_data_capture').
                             join(ids_with_stages, 'client_id', 'inner')
                             )
+
+        filtered_hits_df.repartition(32)
 
         aggregated_users_df = (filtered_users_df.
                                groupBy('client_id').
@@ -381,6 +389,8 @@ class BasicPreprocessor:
                                        'transactions_per_user')
                                )
                                )
+
+        aggregated_users_df.repartition(32)
 
         grouped_shopping_stages_df = (shopping_stages_df.
                                       groupBy('session_id').
@@ -401,13 +411,19 @@ class BasicPreprocessor:
                               'mobile_device_branding': '(not set)'})
                           )
 
+        final_users_df.repartition(32)
+
         final_hits_df = filtered_hits_df.join(
             grouped_shopping_stages_df, 'session_id', 'left_outer')
+
+        final_hits_df.repartition(32)
 
         final_sessions_df = (sessions_df.
                              drop('day_of_data_capture').
                              join(ids_with_stages, 'client_id', 'inner')
                              )
+
+        final_sessions_df.repartition(32)
 
         return {
             'users': final_users_df,
