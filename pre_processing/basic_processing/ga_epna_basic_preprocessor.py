@@ -10,19 +10,11 @@ class BasicPreprocessor:
         self.MASTER_URL = 'local[*]'
         self.APPLICATION_NAME = 'preprocessor'
         self.DAY_AS_STR = getenv('DAY_AS_STR')
-        self.UNIQUE_HASH = getenv('UNIQUE_HASH')
-
-        self.TRAINING_OR_PREDICTION = getenv('TRAINING_OR_PREDICTION')
-        self.MODELS_DIR = getenv('MODELS_DIR')
 
         self.MORPHL_SERVER_IP_ADDRESS = getenv('MORPHL_SERVER_IP_ADDRESS')
         self.MORPHL_CASSANDRA_USERNAME = getenv('MORPHL_CASSANDRA_USERNAME')
         self.MORPHL_CASSANDRA_PASSWORD = getenv('MORPHL_CASSANDRA_PASSWORD')
         self.MORPHL_CASSANDRA_KEYSPACE = getenv('MORPHL_CASSANDRA_KEYSPACE')
-
-        self.HDFS_PORT = 9000
-        self.HDFS_DIR_TRAINING = f'hdfs://{self.MORPHL_SERVER_IP_ADDRESS}:{self.HDFS_PORT}/{self.DAY_AS_STR}_{self.UNIQUE_HASH}_ga_epna_preproc_training'
-        self.HDFS_DIR_PREDICTION = f'hdfs://{self.MORPHL_SERVER_IP_ADDRESS}:{self.HDFS_PORT}/{self.DAY_AS_STR}_{self.UNIQUE_HASH}_ga_epna_preproc_prediction'
 
         self.init_keys()
         self.init_baselines()
@@ -352,20 +344,71 @@ class BasicPreprocessor:
             .options(**save_options_ga_epnah_features_raw)
             .save())
 
-    def save_basic_preprocessed_data_to_cassandra(self, data):
-        data.cache()
+    def process_data(self, users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits_df):
 
-        save_options_ga_epna_preprocessed_features_basic = {
-            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
-            'table': ('ga_epna_preprocessed_features_basic')
+        ids_with_stages = shopping_stages_df.select('client_id').distinct()
+
+        filtered_users_df = (users_df.
+                             drop('day_of_data_capture').
+                             join(ids_with_stages, 'client_id', 'inner')
+                             )
+
+        filtered_mobile_brand_df = (users_df.
+                                    drop('day_of_data_capture', 'sessions').
+                                    join(ids_with_stages, 'client_id', 'inner')
+                                    )
+
+        filtered_hits_df = (hits_df.
+                            drop('day_of_data_capture').
+                            join(ids_with_stages, 'client_id', 'inner')
+                            )
+
+        aggregated_users_df = (filtered_users_df.
+                               groupBy('client_id').
+                               agg(
+                                   f.first('device_category').alias(
+                                       'device_category'),
+                                   f.first('browser').alias('browser'),
+                                   f.sum('bounces').alias('bounces'),
+                                   f.sum('sessions').alias('session'),
+                                   f.sum('revenue_per_user').alias(
+                                       'revenue_per_user'),
+                                   f.sum('transactions_per_user').alias(
+                                       'transactions_per_user')
+                               )
+                               )
+
+        grouped_shopping_stages_df = (shopping_stages_df.
+                                      groupBy('session_id').
+                                      agg(f.collect_set('shopping_stage').alias(
+                                          'shopping_stage'))
+                                      )
+
+        grouped_mobile_brand_df = (users_df.
+                                   groupBy('client_id').
+                                   agg(f.first('mobile_device_branding'))
+                                   )
+
+        final_users_df = (aggregated_users_df.
+                          join(grouped_mobile_brand_df,
+                               'client_id', 'left_outer')
+                          .na.fill({
+                              'mobile_device_branding': '(not set)'})
+                          )
+
+        final_hits_df = filtered_hits_df.join(
+            grouped_shopping_stages_df, 'session_id', 'left_outer')
+
+        final_sessions_df = (sessions_df.
+                             drop('day_of_data_capture').
+                             join(ids_with_stages, 'client_id', 'inner')
+                             )
+
+        return {
+            'users': final_users_df,
+            'sessions': final_sessions_df,
+            'hits': final_hits_df
         }
-
-        (data
-            .write
-            .format('org.apache.spark.sql.cassandra')
-            .mode('append')
-            .options(**save_options_ga_epna_preprocessed_features_basic)
-            .save())
 
     def main(self):
 
@@ -431,9 +474,15 @@ class BasicPreprocessor:
             processed_users_dict['result_df']
         )
 
+        mobile_brand_df = self.fetch_from_cassandra(
+            'ga_epna_users_mobile_brand', spark_session)
+
         sessions_df = (
             processed_sessions_dict['result_df']
         )
+
+        shopping_stages_df = self.fetch_from_cassandra(
+            'ga_epna_sessions_shopping_stages', spark_session)
 
         hits_df = (
             processed_hits_dict['result_df']
@@ -441,12 +490,8 @@ class BasicPreprocessor:
 
         self.save_raw_data(users_df, sessions_df, hits_df)
 
-        processed_data = self.process_data(
-            users_df, sessions_df, hits_df)
-
-        processed_data.write.parquet(self.HDFS_DIR_TRAINING)
-
-        self.save_basic_preprocessed_data_to_cassandra(processed_data)
+        processed_data_dfs = self.process_data(
+            users_df, mobile_brand_df,  sessions_df, sessions_shopping_stages_df, hits_df)
 
 
 if __name__ == '__main__':
