@@ -48,6 +48,10 @@ class BasicPreprocessor:
              'original_name': 'ga:bounces',
              'needs_conversion': True,
              },
+            {'field_name': 'browser',
+             'original_name': 'ga:browser',
+             'needs_conversion': False,
+             },
             {'field_name': 'revenue_per_user',
              'original_name': 'ga:revenuePerUser',
              'needs_conversion': True,
@@ -353,7 +357,7 @@ class BasicPreprocessor:
                              join(ids_with_stages, 'client_id', 'inner')
                              )
 
-        filtered_mobile_brand_df = (users_df.
+        filtered_mobile_brand_df = (mobile_brand_df.
                                     drop('day_of_data_capture', 'sessions').
                                     join(ids_with_stages, 'client_id', 'inner')
                                     )
@@ -384,9 +388,10 @@ class BasicPreprocessor:
                                           'shopping_stage'))
                                       )
 
-        grouped_mobile_brand_df = (users_df.
+        grouped_mobile_brand_df = (filtered_mobile_brand_df.
                                    groupBy('client_id').
-                                   agg(f.first('mobile_device_branding'))
+                                   agg(f.first('mobile_device_branding').alias(
+                                       'mobile_device_branding'))
                                    )
 
         final_users_df = (aggregated_users_df.
@@ -491,7 +496,7 @@ class BasicPreprocessor:
         self.save_raw_data(users_df, sessions_df, hits_df)
 
         processed_data_dfs = self.process_data(
-            users_df, mobile_brand_df,  sessions_df, sessions_shopping_stages_df, hits_df)
+            users_df, mobile_brand_df,  sessions_df, shopping_stages_df, hits_df)
 
 
 if __name__ == '__main__':
