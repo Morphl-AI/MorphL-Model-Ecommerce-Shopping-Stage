@@ -260,6 +260,13 @@ class GoogleAnalytics:
         metrics = ['sessionDuration', 'uniquePageviews', 'transactions', 'transactionRevenue',
                    'uniquePurchases', 'searchResultViews', 'searchUniques', 'searchDepth', 'searchRefinements']
 
+        return self.run_report_and_store('sessions', dimensions, metrics, user_segment)
+
+    # Get sessions shopping stages
+    def store_sessions_shopping_stages(self, user_segment):
+        dimensions = ['dimension1', 'dimension2', 'shoppingStage']
+        metrics = ['pageviews']
+
         dimensions_filters = {
             "filters": [
                 {
@@ -270,14 +277,7 @@ class GoogleAnalytics:
             ]
         }
 
-        return self.run_report_and_store('sessions', dimensions, metrics, user_segment, dimensions_filters)
-
-    # Get sessions shopping stages
-    def store_sessions_shopping_stages(self, user_segment):
-        dimensions = ['dimension1', 'dimension2', 'shoppingStage']
-        metrics = ['pageviews']
-
-        return self.run_report_and_store('sessions_shopping_stages', dimensions, metrics, user_segment)
+        return self.run_report_and_store('sessions_shopping_stages', dimensions, metrics, user_segment, dimensions_filters)
 
     # Get hit level data
     def store_hits(self, user_segment):
