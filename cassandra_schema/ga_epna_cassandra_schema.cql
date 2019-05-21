@@ -47,6 +47,7 @@ CREATE TABLE morphl.ga_epnau_features_raw (
     client_id text,
     day_of_data_capture date,
     device_category text,
+    browser text,
     sessions double, 
     bounces double, 
     revenue_per_user double,

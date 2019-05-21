@@ -240,7 +240,7 @@ class GoogleAnalytics:
 
     # Get user level data
     def store_users(self, user_segment):
-        dimensions = ['dimension1', 'deviceCategory']
+        dimensions = ['dimension1', 'deviceCategory', 'browser']
         metrics = ['sessions', 'bounces',
                    'revenuePerUser', 'transactionsPerUser']
 
