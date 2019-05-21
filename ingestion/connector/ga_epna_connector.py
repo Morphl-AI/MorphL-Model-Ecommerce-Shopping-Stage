@@ -282,7 +282,7 @@ class GoogleAnalytics:
     # Get hit level data
     def store_hits(self, user_segment):
         dimensions = [
-            'dimension1', 'dimension2', 'dimension3', 'userType', 'shoppingStage', 'dateHourMinute'
+            'dimension1', 'dimension2', 'dimension3', 'userType', 'dateHourMinute'
         ]
         metrics = ['timeOnPage', 'productListClicks',
                    'productListViews', 'productDetailViews']

@@ -81,7 +81,6 @@ CREATE TABLE morphl.ga_epnah_features_raw(
   session_id text,
   hit_id text, 
   user_type text,
-  shopping_stage text,
   date_hour_minute text,
   time_on_page double,
   product_list_clicks double,
