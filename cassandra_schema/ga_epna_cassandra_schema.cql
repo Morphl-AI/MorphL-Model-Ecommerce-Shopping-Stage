@@ -30,7 +30,7 @@ CREATE TABLE morphl.ga_epna_sessions_shopping_stages (
     day_of_data_capture date,
     session_id text,
     shopping_stage text,
-    PRIMARY KEY ((client_id), day_of_data_capture, session_id)
+    PRIMARY KEY ((client_id), day_of_data_capture, session_id, shopping_stage)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC, session_id ASC);
 
 CREATE TABLE morphl.ga_epna_hits (

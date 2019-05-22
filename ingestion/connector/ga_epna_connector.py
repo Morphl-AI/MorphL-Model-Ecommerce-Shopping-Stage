@@ -113,7 +113,8 @@ class CassandraPersistence:
                                                                    bind_list,
                                                                    timeout=self.CASS_REQ_TIMEOUT),
                     'client_id': client_id,
-                    'session_id': session_id}
+                    'session_id': session_id,
+                    'shopping_stage': shopping_stage}
 
         if report_type in self.type_5_set:
             session_id = data_dict['dimensions'][1]
@@ -240,7 +241,7 @@ class GoogleAnalytics:
 
     # Get user level data
     def store_users(self, user_segment):
-        dimensions = ['dimension1', 'deviceCategory', 'browser']
+        dimensions = ['dimension8', 'deviceCategory', 'browser']
         metrics = ['sessions', 'bounces',
                    'revenuePerUser', 'transactionsPerUser']
 
@@ -248,14 +249,14 @@ class GoogleAnalytics:
 
     # Get user device branding data
     def store_users_mobile_brand(self, user_segment):
-        dimensions = ['dimension1', 'mobileDeviceBranding']
+        dimensions = ['dimension8', 'mobileDeviceBranding']
         metrics = ['sessions']
 
         return self.run_report_and_store('users_mobile_brand', dimensions, metrics, user_segment)
 
     # Get session level data
     def store_sessions(self, user_segment):
-        dimensions = ['dimension1', 'dimension2', 'searchUsed',
+        dimensions = ['dimension8', 'dimension2', 'searchUsed',
                       'daysSinceLastSession']
         metrics = ['sessionDuration', 'uniquePageviews', 'transactions', 'transactionRevenue',
                    'uniquePurchases', 'searchResultViews', 'searchUniques', 'searchDepth', 'searchRefinements']
@@ -264,7 +265,7 @@ class GoogleAnalytics:
 
     # Get sessions shopping stages
     def store_sessions_shopping_stages(self, user_segment):
-        dimensions = ['dimension1', 'dimension2', 'shoppingStage']
+        dimensions = ['dimension8', 'dimension2', 'shoppingStage']
         metrics = ['pageviews']
 
         dimensions_filters = {
@@ -282,7 +283,7 @@ class GoogleAnalytics:
     # Get hit level data
     def store_hits(self, user_segment):
         dimensions = [
-            'dimension1', 'dimension2', 'dimension3', 'userType', 'dateHourMinute'
+            'dimension8', 'dimension2', 'dimension3', 'userType', 'dateHourMinute'
         ]
         metrics = ['timeOnPage', 'productListClicks',
                    'productListViews', 'productDetailViews']
