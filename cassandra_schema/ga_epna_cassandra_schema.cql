@@ -89,6 +89,51 @@ CREATE TABLE morphl.ga_epnah_features_raw(
   PRIMARY KEY ((client_id), day_of_data_capture, session_id, hit_id)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
+CREATE TABLE morphl.ga_epnau_features_filtered (
+    client_id text,
+    device_category text,
+    browser text,
+    sessions double, 
+    bounces double, 
+    revenue_per_user double,
+    transactions_per_user double,
+    mobile_device_branding text,
+    PRIMARY KEY ((client_id))
+);
+
+CREATE TABLE morphl.ga_epnas_features_filtered(
+  client_id text,
+  session_id text, 
+  search_used text,
+  days_since_last_session double,
+  session_duration double, 
+  page_views double,
+  unique_page_views double,
+  transactions double, 
+  transaction_revenue double,
+  unique_purchases double,
+  search_result_views double,
+  search_uniques double, 
+  search_depth double,
+  search_refinements double,
+  PRIMARY KEY ((client_id), session_id)
+);
+
+
+CREATE TABLE morphl.ga_epnah_features_filtered(
+  client_id text,
+  session_id text,
+  hit_id text, 
+  user_type text,
+  date_hour_minute text,
+  time_on_page double,
+  product_list_clicks double,
+  product_list_views double,
+  product_detail_views double,
+  shopping_stage set<text>,
+  PRIMARY KEY ((client_id),session_id, hit_id)
+);
+
 CREATE TABLE morphl.ga_epna_config_parameters (
   morphl_component_name text,
   parameter_name text,
