@@ -344,7 +344,7 @@ class BasicPreprocessor:
             .options(**save_options_ga_epnah_features_raw)
             .save())
 
-    def process_data(self, users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits_df):
+    def filter_data(self, users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits_df):
 
         ids_with_stages = shopping_stages_df.select('client_id').distinct()
 
@@ -378,7 +378,7 @@ class BasicPreprocessor:
                                        'device_category'),
                                    f.first('browser').alias('browser'),
                                    f.sum('bounces').alias('bounces'),
-                                   f.sum('sessions').alias('session'),
+                                   f.sum('sessions').alias('sessions'),
                                    f.sum('revenue_per_user').alias(
                                        'revenue_per_user'),
                                    f.sum('transactions_per_user').alias(
@@ -422,10 +422,46 @@ class BasicPreprocessor:
         final_sessions_df.repartition(32)
 
         return {
-            'users': final_users_df,
-            'sessions': final_sessions_df,
-            'hits': final_hits_df
+            'user_data': final_users_df,
+            'session_data': final_sessions_df,
+            'hit_data': final_hits_df
         }
+
+    def save_filtered_data(self, dfs_dict):
+
+        save_options_ga_epnau_features_filtered = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epnau_features_filtered')
+        }
+        save_options_ga_epnas_features_filtered = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epnas_features_filtered')
+        }
+        save_options_ga_epnah_features_filtered = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epnah_features_filtered')
+        }
+
+        (dfs_dict['user_data']
+            .write
+            .format('org.apache.spark.sql.cassandra')
+            .mode('append')
+            .options(**save_options_ga_epnau_features_filtered)
+            .save())
+
+        (dfs_dict['session_data']
+            .write
+            .format('org.apache.spark.sql.cassandra')
+            .mode('append')
+            .options(**save_options_ga_epnas_features_filtered)
+            .save())
+
+        (dfs_dict['hit_data']
+            .write
+            .format('org.apache.spark.sql.cassandra')
+            .mode('append')
+            .options(**save_options_ga_epnah_features_filtered)
+            .save())
 
     def main(self):
 
@@ -507,8 +543,10 @@ class BasicPreprocessor:
 
         self.save_raw_data(users_df, sessions_df, hits_df)
 
-        processed_data_dfs = self.process_data(
+        processed_data_dfs = self.filter_data(
             users_df, mobile_brand_df,  sessions_df, shopping_stages_df, hits_df)
+
+        self.save_filtered_data(processed_data_dfs)
 
 
 if __name__ == '__main__':
