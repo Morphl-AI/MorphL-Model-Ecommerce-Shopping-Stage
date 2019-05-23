@@ -421,10 +421,8 @@ class BasicPreprocessor:
 
         final_hits_df.repartition(32)
 
-        final_sessions_df = (sessions_df.
-                             drop('day_of_data_capture').
-                             join(ids_with_stages, 'client_id', 'inner')
-                             )
+        final_sessions_df = sessions_df.drop(
+            'day_of_data_capture').filter('session_duration > 0')
 
         final_sessions_df.repartition(32)
 
