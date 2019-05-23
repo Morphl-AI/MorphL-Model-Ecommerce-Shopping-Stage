@@ -10,11 +10,18 @@ class BasicPreprocessor:
         self.MASTER_URL = 'local[*]'
         self.APPLICATION_NAME = 'preprocessor'
         self.DAY_AS_STR = getenv('DAY_AS_STR')
+        self.MODEL_DAY_AS_STR = getenv('MODEL_DAY_AS_STR')
+        self.UNIQUE_HASH = getenv('UNIQUE_HASH')
 
         self.MORPHL_SERVER_IP_ADDRESS = getenv('MORPHL_SERVER_IP_ADDRESS')
         self.MORPHL_CASSANDRA_USERNAME = getenv('MORPHL_CASSANDRA_USERNAME')
         self.MORPHL_CASSANDRA_PASSWORD = getenv('MORPHL_CASSANDRA_PASSWORD')
         self.MORPHL_CASSANDRA_KEYSPACE = getenv('MORPHL_CASSANDRA_KEYSPACE')
+
+        self.HDFS_PORT = 9000
+        self.MODELS_DIR = getenv('MODELS_DIR')
+
+        self.HDFS_DIR_PREDICTION = f'hdfs://{self.MORPHL_SERVER_IP_ADDRESS}:{self.HDFS_PORT}/{self.MODEL_DAY_AS_STR}_{self.UNIQUE_HASH}_ga_epna_preproc_prediction'
 
         self.init_keys()
         self.init_baselines()
@@ -463,6 +470,17 @@ class BasicPreprocessor:
             .options(**save_options_ga_epnah_features_filtered)
             .save())
 
+    def merge_and_save_data(self, dfs_dict):
+        users_and_sessions_df = dfs_dict['user_data'].join(
+            dfs_dict['session_data'], 'client_id', 'inner')
+
+        final_df = dfs_dict['hit_data'].join(
+            users_and_sessions_df, ['client_id', 'session_id'], 'inner')
+
+        final_df.repartition(32)
+
+        final_df.write.parquet(self.HDFS_DIR_PREDICTION)
+
     def main(self):
 
         spark_session = self.get_spark_session()
@@ -547,6 +565,8 @@ class BasicPreprocessor:
             users_df, mobile_brand_df,  sessions_df, shopping_stages_df, hits_df)
 
         self.save_filtered_data(processed_data_dfs)
+
+        self.merge_and_save_data(processed_data_dfs)
 
 
 if __name__ == '__main__':
