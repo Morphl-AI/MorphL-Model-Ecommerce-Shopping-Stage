@@ -18,6 +18,7 @@ class BasicPreprocessor:
         self.init_keys()
         self.init_baselines()
 
+    # Initialize Cassandra tables primary keys.
     def init_keys(self):
 
         primary_key = {}
@@ -30,10 +31,17 @@ class BasicPreprocessor:
 
         self.primary_key = primary_key
 
+    # Get all the features that need to be parsed from the jsons.
     def init_baselines(self):
 
         field_baselines = {}
 
+        # device_category: the type of device associated to the user: tablet, mobile or desktop;
+        # sessions: the number of sessions a user has;
+        # bounces: the number of bounced sessions a user has;
+        # browser: the type of browser used by a user;
+        # revenue_per_user: the amount of money a user has spent on the site;
+        # transactions_per_user: the number of transactions a user completed on the site.
         field_baselines['ga_epnau_df'] = [
             {'field_name': 'device_category',
              'original_name': 'ga:deviceCategory',
@@ -61,6 +69,18 @@ class BasicPreprocessor:
              },
         ]
 
+        # session_duration: the total duration of a session;
+        # unique_page_views: the number of unique pageviews during a session;
+        # transactions: the number of transactions completed in a session;
+        # transaction_revenue: the amount of money spent on the transactions in a session;
+        # unique_purchases: the number of unique items bought by the user in a session;
+        # search_result_views: the number of times a search result page was viewed in a session;
+        # search_uniques: total number of unique keywords from internal searches during a session;
+        # search_depth: total number of subsequent page views made after an internal search;
+        # search_refinements: the number of times a transition occurs between internal keywords search within a session
+        #                     ex: "shoes", "shoes", "pants", "pants" => 1 transition from shoes to pants
+        # search_used: a boolean representing wether an internal search used in a session;
+        # days_since_last_session: the number of days elapsed since the last sessions.
         field_baselines['ga_epnas_df'] = [
             {'field_name': 'session_duration',
              'original_name': 'ga:sessionDuration',
@@ -108,6 +128,9 @@ class BasicPreprocessor:
              },
         ]
 
+        # time_on_page: the amount of time a user spent on the page;
+        # user_type: a boolean signifying wether the user is new or returning;
+        # date_hour_minute: the date, hour and minute the hit occured at.
         field_baselines['ga_epnah_df'] = [
             {'field_name': 'time_on_page',
              'original_name': 'ga:timeOnPage',
@@ -137,6 +160,7 @@ class BasicPreprocessor:
 
         self.field_baselines = field_baselines
 
+    # Initialize the spark sessions and return it.
     def get_spark_session(self):
 
         spark_session = (
@@ -155,6 +179,7 @@ class BasicPreprocessor:
 
         return spark_session
 
+    # Return a spark dataframe from a specified Cassandra table.
     def fetch_from_cassandra(self, c_table_name, spark_session):
 
         load_options = {
@@ -168,6 +193,7 @@ class BasicPreprocessor:
 
         return df
 
+    # Get the json schema of a df.
     def get_json_schemas(self, df, spark_session):
         return {
             'json_meta_schema': spark_session.read.json(
@@ -198,6 +224,7 @@ class BasicPreprocessor:
 
         return values
 
+    # Get the parsed jsons as dfs.
     def get_parsed_jsons(self, json_schemas, dataframes):
 
         after_json_parsing_df = {}
@@ -246,6 +273,7 @@ class BasicPreprocessor:
 
         return after_json_parsing_df
 
+    # Parse json data.
     def process_json_data(self, df, primary_key, field_baselines):
         schema_as_list = [
             fb['field_name']
@@ -303,6 +331,7 @@ class BasicPreprocessor:
         return {'result_df': result_df,
                 'schema_as_list': schema_as_list}
 
+    # Save the raw dfs to Cassandra tables.
     def save_raw_data(self, user_data, session_data, hit_data):
 
         user_data.cache()
@@ -345,10 +374,13 @@ class BasicPreprocessor:
 
     def filter_data(self, users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits_df):
 
+        # Get all the ids that have the required shopping stages.
         ids_with_stages = shopping_stages_df.select('client_id').distinct()
 
+        # Cache this df since it will be used numerous times.
         ids_with_stages.cache()
 
+        # Filter users by ids with shopping stages.
         filtered_users_df = (users_df.
                              drop('day_of_data_capture').
                              join(ids_with_stages, 'client_id', 'inner')
@@ -356,6 +388,7 @@ class BasicPreprocessor:
 
         filtered_users_df.repartition(32)
 
+        # Filter mobile brand users by ids with shopping stages.
         filtered_mobile_brand_df = (mobile_brand_df.
                                     drop('day_of_data_capture', 'sessions').
                                     join(ids_with_stages, 'client_id', 'inner')
@@ -363,6 +396,7 @@ class BasicPreprocessor:
 
         filtered_mobile_brand_df.repartition(32)
 
+        # Filter hits by ids with shopping stages.
         filtered_hits_df = (hits_df.
                             drop('day_of_data_capture').
                             join(ids_with_stages, 'client_id', 'inner')
@@ -370,6 +404,8 @@ class BasicPreprocessor:
 
         filtered_hits_df.repartition(32)
 
+        # Aggregate users data since it is spread out on
+        # multiple days of data capture.
         aggregated_users_df = (filtered_users_df.
                                groupBy('client_id').
                                agg(
@@ -387,18 +423,22 @@ class BasicPreprocessor:
 
         aggregated_users_df.repartition(32)
 
+        # Group shopping stages per session into a set.
         grouped_shopping_stages_df = (shopping_stages_df.
                                       groupBy('session_id').
                                       agg(f.collect_set('shopping_stage').alias(
                                           'shopping_stage'))
                                       )
 
+        # Remove user duplicates and get their respective mobile device brand.
         grouped_mobile_brand_df = (filtered_mobile_brand_df.
                                    groupBy('client_id').
                                    agg(f.first('mobile_device_branding').alias(
                                        'mobile_device_branding'))
                                    )
 
+        # Add the mobile data to uses that have a mobile device, otherwise
+        # make the column equal to (not set).
         final_users_df = (aggregated_users_df.
                           join(grouped_mobile_brand_df,
                                'client_id', 'left_outer')
@@ -408,11 +448,13 @@ class BasicPreprocessor:
 
         final_users_df.repartition(32)
 
+        # Add the shopping stage data to hits by session id.
         final_hits_df = filtered_hits_df.join(
             grouped_shopping_stages_df, 'session_id', 'left_outer')
 
         final_hits_df.repartition(32)
 
+        # Remove sessions that have a duration equal to 0.
         final_sessions_df = sessions_df.drop(
             'day_of_data_capture').filter('session_duration > 0')
 
@@ -424,6 +466,7 @@ class BasicPreprocessor:
             'hit_data': final_hits_df
         }
 
+    # Save filtered data to Cassandra.
     def save_filtered_data(self, dfs_dict):
 
         save_options_ga_epnau_features_filtered = {
@@ -464,6 +507,7 @@ class BasicPreprocessor:
 
         spark_session = self.get_spark_session()
 
+        # Get the number of days to process.
         ga_config_df = (
             self.fetch_from_cassandra(
                 'ga_epna_config_parameters', spark_session)
@@ -474,6 +518,7 @@ class BasicPreprocessor:
         start_date = ((datetime.datetime.now(
         ) - datetime.timedelta(days=days_worth_of_data_to_load)).strftime('%Y-%m-%d'))
 
+        # Fetch required tables from Cassandra.
         ga_epna_users_df = self.fetch_from_cassandra(
             'ga_epna_users', spark_session)
 
@@ -485,6 +530,7 @@ class BasicPreprocessor:
 
         dataframes = {}
 
+        # Filter them by the date we need.
         dataframes['ga_epnau_df'] = (
             ga_epna_users_df
             .filter("day_of_data_capture >= '{}'".format(start_date)))
@@ -499,6 +545,7 @@ class BasicPreprocessor:
 
         json_schemas = {}
 
+        # Get each df's json schema.
         json_schemas['ga_epnau_df'] = self.get_json_schemas(
             dataframes['ga_epnau_df'], spark_session)
         json_schemas['ga_epnas_df'] = self.get_json_schemas(
@@ -520,29 +567,33 @@ class BasicPreprocessor:
                                                      self.primary_key['ga_epnah_df'],
                                                      self.field_baselines['ga_epnah_df'])
 
+        # Dfs that do not need parsing and can just be retrieved from Cassandra.
+        mobile_brand_df = self.fetch_from_cassandra(
+            'ga_epna_users_mobile_brand', spark_session)
+
+        shopping_stages_df = self.fetch_from_cassandra(
+            'ga_epna_sessions_shopping_stages', spark_session)
+
         users_df = (
             processed_users_dict['result_df']
         )
-
-        mobile_brand_df = self.fetch_from_cassandra(
-            'ga_epna_users_mobile_brand', spark_session)
 
         sessions_df = (
             processed_sessions_dict['result_df']
         )
 
-        shopping_stages_df = self.fetch_from_cassandra(
-            'ga_epna_sessions_shopping_stages', spark_session)
-
         hits_df = (
             processed_hits_dict['result_df']
         )
 
+        # Save raw data to Cassandra.
         self.save_raw_data(users_df, sessions_df, hits_df)
 
+        # Get all the filtered dfs.
         processed_data_dfs = self.filter_data(
             users_df, mobile_brand_df,  sessions_df, shopping_stages_df, hits_df)
 
+        # Save filtered dfs to Cassandra.
         self.save_filtered_data(processed_data_dfs)
 
 
