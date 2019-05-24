@@ -286,7 +286,7 @@ class GoogleAnalytics:
             'dimension8', 'dimension2', 'dimension3', 'userType', 'dateHourMinute'
         ]
         metrics = ['timeOnPage', 'productListClicks',
-                   'productListViews', 'productDetailViews']
+                   'productListViews', 'productDetailViews', 'pageviews']
 
         return self.run_report_and_store('hits', dimensions, metrics, user_segment)
 
