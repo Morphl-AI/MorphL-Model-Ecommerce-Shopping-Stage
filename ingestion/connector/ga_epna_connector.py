@@ -75,6 +75,7 @@ class CassandraPersistence:
         json_meta = dumps(meta_dict)
         json_data = dumps(data_dict)
 
+        # User related data
         if report_type in self.type_1_set:
             bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
                          json_meta, json_data]
@@ -83,6 +84,7 @@ class CassandraPersistence:
                                                                    timeout=self.CASS_REQ_TIMEOUT),
                     'client_id': client_id}
 
+        # Mobile device related data for mobile users
         if report_type in self.type_2_set:
             mobile_device_branding = data_dict['dimensions'][1]
             bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
@@ -93,6 +95,7 @@ class CassandraPersistence:
                                                                    timeout=self.CASS_REQ_TIMEOUT),
                     'client_id': client_id}
 
+        # Session related data
         if report_type in self.type_3_set:
             session_id = data_dict['dimensions'][1]
             bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
@@ -103,6 +106,7 @@ class CassandraPersistence:
                     'client_id': client_id,
                     'session_id': session_id}
 
+        # Session shopping stage data
         if report_type in self.type_4_set:
             session_id = data_dict['dimensions'][1]
             shopping_stage = data_dict['dimensions'][2]
@@ -116,6 +120,7 @@ class CassandraPersistence:
                     'session_id': session_id,
                     'shopping_stage': shopping_stage}
 
+        # Hit related data
         if report_type in self.type_5_set:
             session_id = data_dict['dimensions'][1]
             hit_id = data_dict['dimensions'][2] + \
@@ -180,6 +185,8 @@ class GoogleAnalytics:
             'pageSize': self.API_PAGE_SIZE,
         }
 
+        # Segment filter so we get users in batches based on the starting digit
+        # of their client id, ex: GA1, GA2, GA3 etc.
         query_params['dimensionFilterClauses'] = [
             {
                 "filters": [
@@ -193,6 +200,7 @@ class GoogleAnalytics:
             }
         ]
 
+        # Extra filters for dimensions and metrics based on need.
         if dimensions_filters is not None:
             query_params['dimensionFilterClauses'].append(dimensions_filters)
 
@@ -247,7 +255,9 @@ class GoogleAnalytics:
 
         return self.run_report_and_store('users', dimensions, metrics, user_segment)
 
-    # Get user device branding data
+    # Get user device branding data separately from general user data because
+    # the google reporting API would only return mobile users if requested together
+    # with the rest of the data.
     def store_users_mobile_brand(self, user_segment):
         dimensions = ['dimension8', 'mobileDeviceBranding']
         metrics = ['sessions']
@@ -263,11 +273,14 @@ class GoogleAnalytics:
 
         return self.run_report_and_store('sessions', dimensions, metrics, user_segment)
 
-    # Get sessions shopping stages
+    # Get sessions shopping stages separately from general session data because shopping stages show up
+    # as one per row and would cause alot of data duplication for all the other columns.
     def store_sessions_shopping_stages(self, user_segment):
         dimensions = ['dimension8', 'dimension2', 'shoppingStage']
         metrics = ['pageviews']
 
+        # Apply a filter when retrieving shopping stages so that we only get shopping stages relevant to
+        # our model.
         dimensions_filters = {
             "filters": [
                 {
@@ -285,6 +298,10 @@ class GoogleAnalytics:
         dimensions = [
             'dimension8', 'dimension2', 'dimension3', 'userType', 'dateHourMinute'
         ]
+
+        # Pageviews is not used as a feature in the model since it is covered by
+        # unique pageviews in the session's request. We add it here so that
+        # hits that only have pageview events get retrieved aswell.
         metrics = ['timeOnPage', 'productListClicks',
                    'productListViews', 'productDetailViews', 'pageviews']
 
@@ -296,6 +313,8 @@ class GoogleAnalytics:
         for i in range(1, 10):
             user_segment = 'GA' + str(i)
 
+            # Add sleep() calls in between requests so as
+            # to not exceed the requests/time quota and get temporarily blocked.
             self.store_users(user_segment)
             sleep(1)
             self.store_users_mobile_brand(user_segment)
