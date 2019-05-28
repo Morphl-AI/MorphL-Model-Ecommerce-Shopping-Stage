@@ -47,6 +47,57 @@ class CalculationsPreprocessor:
 
         return df
 
+    def calculate_browser_device_features(self, users_df, sessions_df):
+        users_sessions_df = (users_df
+                             .join(
+                                 sessions_df,
+                                 'client_id',
+                                 'inner'))
+
+        transactions_by_device_df = (users_sessions_df
+                                     .groupBy('mobile_device_branding')
+                                     .agg(
+                                         f.sum('transactions').alias(
+                                             'transactions'),
+                                         f.sum('transaction_revenue').alias(
+                                             'transaction_revenue')
+                                     ))
+
+        transactions_by_device_df = (transactions_by_device_df
+                                     .withColumn(
+                                         'device_revenue_per_transaction',
+                                         transactions_by_device_df.transaction_revenue /
+                                         (transactions_by_device_df.transactions + 1e-5)
+                                     ))
+
+        transactions_by_browser_df = (users_sessions_df
+                                      .groupBy('browser')
+                                      .agg(
+                                          f.sum('transactions').alias(
+                                              'transactions'),
+                                          f.sum('transaction_revenue').alias(
+                                              'transaction_revenue')
+                                      ))
+
+        transactions_by_browser_df = (transactions_by_browser_df
+                                      .withColumn(
+                                          'browser_revenue_per_transaction',
+                                          transactions_by_browser_df.transaction_revenue /
+                                          (transactions_by_browser_df.transactions + 1e-5)
+                                      ))
+
+        return (users_sessions_df
+                .join(
+                    transactions_by_device_df,
+                    'mobile_device_branding',
+                    'inner'
+                )
+                .join(
+                    transactions_by_browser_df,
+                    'browser',
+                    'inner')
+                )
+
     def main(self):
 
         spark_session = self.get_spark_session()
@@ -62,3 +113,6 @@ class CalculationsPreprocessor:
         ga_epnah_features_filtered_df = self.fetch_from_cassandra(
             'ga_epnah_features_filtered', spark_session
         )
+
+        users_df = self.calculate_browser_device_features(
+            ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
