@@ -134,6 +134,13 @@ class CalculationsPreprocessor:
 
         return df.withColumn('shopping_stage', remove_outliers_udf('shopping_stage'))
 
+    def replace_single_product_views(self, df):
+
+        replace_single_product_view_udf = f.udf(
+            lambda stages: stages if stages != 'PRODUCT_VIEW' else 'ALL_VISITS|PRODUCT_VIEW')
+
+        return df.withColumn('shopping_stage', replace_single_product_view_udf('shopping_stage'))
+
     def main(self):
 
         spark_session = self.get_spark_session()
@@ -172,5 +179,7 @@ class CalculationsPreprocessor:
         final_data = self.aggregate_transactions(final_data)
 
         final_data = self.remove_outliers(final_data)
+
+        final_data = self.replace_single_product_views(final_data)
 
         final_data.show()
