@@ -190,3 +190,8 @@ class CalculationsPreprocessor:
             final_data).repartition(32)
 
         final_data.show()
+
+
+if __name__ == '__main__':
+    preprocessor = CalculationsPreprocessor()
+    preprocessor.main()
