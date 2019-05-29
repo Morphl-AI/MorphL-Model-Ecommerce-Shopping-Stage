@@ -103,6 +103,12 @@ class CalculationsPreprocessor:
 
         return df.withColumn('shopping_stage', format_stages_udf('shopping_stage'))
 
+    def aggregate_transactions(self, df):
+        replace_stages_udf = f.udf(lambda stages: 'TRANSACTION' if stages.find(
+            'TRANSACTION') != -1 else stages, 'string')
+
+        return df.withColumn('shopping_stage', replace_stages_udf('shopping_stage'))
+
     def main(self):
 
         spark_session = self.get_spark_session()
@@ -137,5 +143,7 @@ class CalculationsPreprocessor:
                       ))
 
         final_data = self.format_shopping_stages(final_data)
+
+        final_data = self.aggregate_transactions(final_data)
 
         final_data.show()
