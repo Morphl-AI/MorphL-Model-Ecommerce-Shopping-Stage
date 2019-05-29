@@ -95,7 +95,7 @@ class CalculationsPreprocessor:
                                       ))
 
         # Merge new columns into main df and return them
-        return (users_sessions_df
+        return (users_df
                 .join(
                     transactions_by_device_df,
                     'mobile_device_branding',
