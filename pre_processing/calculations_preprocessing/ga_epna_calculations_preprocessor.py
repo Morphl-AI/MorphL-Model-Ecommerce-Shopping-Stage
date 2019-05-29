@@ -98,6 +98,11 @@ class CalculationsPreprocessor:
                     'inner')
                 )
 
+    def format_shopping_stages(self, df):
+        format_stages_udf = f.udf(lambda stages: '|'.join(stages), 'string')
+
+        return df.withColumn('shopping_stage', format_stages_udf('shopping_stage'))
+
     def main(self):
 
         spark_session = self.get_spark_session()
@@ -116,3 +121,21 @@ class CalculationsPreprocessor:
 
         users_df = self.calculate_browser_device_features(
             ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
+
+        users_sessions_data = (users_df
+                               .join(
+                                   ga_epnas_features_filtered_df,
+                                   'client_id',
+                                   'inner'
+                               ))
+
+        final_data = (ga_epnah_features_filtered_df
+                      .join(
+                          users_sessions_data,
+                          ['client_id', 'session_id'],
+                          'inner'
+                      ))
+
+        final_data = self.format_shopping_stages(final_data)
+
+        final_data.show()
