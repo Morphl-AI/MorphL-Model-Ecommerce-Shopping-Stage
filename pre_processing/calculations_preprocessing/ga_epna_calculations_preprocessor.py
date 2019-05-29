@@ -109,6 +109,31 @@ class CalculationsPreprocessor:
 
         return df.withColumn('shopping_stage', replace_stages_udf('shopping_stage'))
 
+    def remove_outliers(self, df):
+
+        unique_stages_counts = (df
+                                .groupBy('shopping_stage')
+                                .agg(
+                                    f.countDistinct('client_id')
+                                    .alias('stages_count')
+                                ))
+
+        outlier_threshold = max(unique_stages_counts.agg(
+            f.sum('stages_count')).collect()[0][0] / 1000, 20)
+
+        list_of_outlier_stages = (unique_stages_counts
+                                  .select('shopping_stage')
+                                  .where(unique_stages_counts.stages_count < outlier_threshold)
+                                  .rdd
+                                  .flatMap(lambda stage: stage)
+                                  .collect()
+                                  )
+
+        remove_outliers_udf = f.udf(
+            lambda stages: stages if stages not in list_of_outlier_stages else 'ALL_VISITS', 'string')
+
+        return df.withColumn('shopping_stage', remove_outliers_udf('shopping_stage'))
+
     def main(self):
 
         spark_session = self.get_spark_session()
@@ -145,5 +170,7 @@ class CalculationsPreprocessor:
         final_data = self.format_shopping_stages(final_data)
 
         final_data = self.aggregate_transactions(final_data)
+
+        final_data = self.remove_outliers(final_data)
 
         final_data.show()
