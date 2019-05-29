@@ -54,6 +54,8 @@ class CalculationsPreprocessor:
                                  'client_id',
                                  'inner'))
 
+        users_sessions_df.cache()
+
         transactions_by_device_df = (users_sessions_df
                                      .groupBy('mobile_device_branding')
                                      .agg(
@@ -96,7 +98,7 @@ class CalculationsPreprocessor:
                     transactions_by_browser_df,
                     'browser',
                     'inner')
-                )
+                ).repartition(32)
 
     def format_shopping_stages(self, df):
         format_stages_udf = f.udf(lambda stages: '|'.join(stages), 'string')
@@ -117,6 +119,8 @@ class CalculationsPreprocessor:
                                     f.countDistinct('client_id')
                                     .alias('stages_count')
                                 ))
+
+        unique_stages_counts.cache()
 
         outlier_threshold = max(unique_stages_counts.agg(
             f.sum('stages_count')).collect()[0][0] / 1000, 20)
@@ -165,14 +169,16 @@ class CalculationsPreprocessor:
                                    ga_epnas_features_filtered_df,
                                    'client_id',
                                    'inner'
-                               ))
+                               )
+                               .repartition(32))
 
         final_data = (ga_epnah_features_filtered_df
                       .join(
                           users_sessions_data,
                           ['client_id', 'session_id'],
                           'inner'
-                      ))
+                      )
+                      .repartition(32))
 
         final_data = self.format_shopping_stages(final_data)
 
@@ -180,6 +186,7 @@ class CalculationsPreprocessor:
 
         final_data = self.remove_outliers(final_data)
 
-        final_data = self.replace_single_product_views(final_data)
+        final_data = self.replace_single_product_views(
+            final_data).repartition(32)
 
         final_data.show()
