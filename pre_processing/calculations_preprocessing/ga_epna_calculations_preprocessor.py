@@ -16,7 +16,6 @@ class CalculationsPreprocessor:
 
     # Initialize the spark sessions and return it.
     def get_spark_session(self):
-
         spark_session = (
             SparkSession.builder
             .appName(self.APPLICATION_NAME)
@@ -48,14 +47,18 @@ class CalculationsPreprocessor:
         return df
 
     def calculate_browser_device_features(self, users_df, sessions_df):
+
+        # Merge sessions and users dataframes
         users_sessions_df = (users_df
                              .join(
                                  sessions_df,
                                  'client_id',
                                  'inner'))
 
+        # Cache df since it will be used to later
         users_sessions_df.cache()
 
+        # Aggregate transactions and revenue by mobile device branding
         transactions_by_device_df = (users_sessions_df
                                      .groupBy('mobile_device_branding')
                                      .agg(
@@ -65,6 +68,7 @@ class CalculationsPreprocessor:
                                              'transaction_revenue')
                                      ))
 
+        # Calculate device revenue per transaction column
         transactions_by_device_df = (transactions_by_device_df
                                      .withColumn(
                                          'device_revenue_per_transaction',
@@ -72,6 +76,7 @@ class CalculationsPreprocessor:
                                          (transactions_by_device_df.transactions + 1e-5)
                                      ))
 
+        # Aggregate transactions and revenue by browser
         transactions_by_browser_df = (users_sessions_df
                                       .groupBy('browser')
                                       .agg(
@@ -81,6 +86,7 @@ class CalculationsPreprocessor:
                                               'transaction_revenue')
                                       ))
 
+        # Calculate browser revenue per transaction column
         transactions_by_browser_df = (transactions_by_browser_df
                                       .withColumn(
                                           'browser_revenue_per_transaction',
@@ -88,6 +94,7 @@ class CalculationsPreprocessor:
                                           (transactions_by_browser_df.transactions + 1e-5)
                                       ))
 
+        # Merge new columns into main df and return them
         return (users_sessions_df
                 .join(
                     transactions_by_device_df,
@@ -100,19 +107,23 @@ class CalculationsPreprocessor:
                     'inner')
                 ).repartition(32)
 
+    # Format shopping stages and cast them to string
     def format_shopping_stages(self, df):
         format_stages_udf = f.udf(lambda stages: '|'.join(stages), 'string')
 
         return df.withColumn('shopping_stage', format_stages_udf('shopping_stage'))
 
+    # Replace all shopping stages that contain the TRANSACTION stage with just TRANSACTION
     def aggregate_transactions(self, df):
         replace_stages_udf = f.udf(lambda stages: 'TRANSACTION' if stages.find(
             'TRANSACTION') != -1 else stages, 'string')
 
         return df.withColumn('shopping_stage', replace_stages_udf('shopping_stage'))
 
+    # Remove outlying shopping stages
     def remove_outliers(self, df):
 
+        # Get the counts for all unique shopping stages
         unique_stages_counts = (df
                                 .groupBy('shopping_stage')
                                 .agg(
@@ -122,9 +133,11 @@ class CalculationsPreprocessor:
 
         unique_stages_counts.cache()
 
+        # Calculate the threshold for outliers
         outlier_threshold = max(unique_stages_counts.agg(
             f.sum('stages_count')).collect()[0][0] / 1000, 20)
 
+        # Get a list of all shopping stages bellow the threshold
         list_of_outlier_stages = (unique_stages_counts
                                   .select('shopping_stage')
                                   .where(unique_stages_counts.stages_count < outlier_threshold)
@@ -133,11 +146,13 @@ class CalculationsPreprocessor:
                                   .collect()
                                   )
 
+        # Replace all outlying shopping stages with ALL_VISITS
         remove_outliers_udf = f.udf(
             lambda stages: stages if stages not in list_of_outlier_stages else 'ALL_VISITS', 'string')
 
         return df.withColumn('shopping_stage', remove_outliers_udf('shopping_stage'))
 
+    # Replace single PRODUCT_VIEW shopping stages with ALL_VISITS|PRODUCT_VIEW
     def replace_single_product_views(self, df):
 
         replace_single_product_view_udf = f.udf(
@@ -147,8 +162,10 @@ class CalculationsPreprocessor:
 
     def main(self):
 
+        # Initialize spark session
         spark_session = self.get_spark_session()
 
+        # Fetch filtered dfs from Cassandra
         ga_epnau_features_filtered_df = self.fetch_from_cassandra(
             'ga_epnau_features_filtered', spark_session
         )
@@ -161,9 +178,11 @@ class CalculationsPreprocessor:
             'ga_epnah_features_filtered', spark_session
         )
 
+        # Calculate revenue by device and revenue by browser columns
         users_df = self.calculate_browser_device_features(
             ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
 
+        # Merge users and sessions together
         users_sessions_data = (users_df
                                .join(
                                    ga_epnas_features_filtered_df,
@@ -172,6 +191,7 @@ class CalculationsPreprocessor:
                                )
                                .repartition(32))
 
+        # Merge users_sessions data with hits data
         final_data = (ga_epnah_features_filtered_df
                       .join(
                           users_sessions_data,
@@ -180,12 +200,16 @@ class CalculationsPreprocessor:
                       )
                       .repartition(32))
 
+        # Format shopping stages as strings
         final_data = self.format_shopping_stages(final_data)
 
+        # Aggregate all transactions to a single output
         final_data = self.aggregate_transactions(final_data)
 
+        # Remove shopping stage outliers
         final_data = self.remove_outliers(final_data)
 
+        # Replace single product views with all visits
         final_data = self.replace_single_product_views(
             final_data).repartition(32)
 
