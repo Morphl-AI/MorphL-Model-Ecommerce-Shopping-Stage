@@ -146,9 +146,9 @@ class FilteringPreprocessor:
         final_sessions_df.repartition(32)
 
         return {
-            'user_data': final_users_df,
-            'session_data': final_sessions_df,
-            'hit_data': final_hits_df
+            'user': final_users_df,
+            'session': final_sessions_df,
+            'hit': final_hits_df
         }
 
     def save_filtered_data(self, user_df, session_df, hit_df):
@@ -225,6 +225,9 @@ class FilteringPreprocessor:
             shopping_stages_df,
             ga_epnah_features_raw
         ))
+
+        self.save_filtered_data(
+            filtered_data_dfs['user'], filtered_data_dfs['session'], filtered_data_dfs['hit'])
 
 
 if __name__ == '__main__':
