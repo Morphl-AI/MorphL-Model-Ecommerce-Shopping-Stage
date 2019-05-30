@@ -18,9 +18,9 @@ class FilteringPreprocessor:
         self.MORPHL_CASSANDRA_PASSWORD = getenv('MORPHL_CASSANDRA_PASSWORD')
         self.MORPHL_CASSANDRA_KEYSPACE = getenv('MORPHL_CASSANDRA_KEYSPACE')
 
-        self.HDFS_DIR_USER = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnau_filtered'
-        self.HDFS_DIR_SESSION = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnas_filtered'
-        self.HDFS_DIR_HIT = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnah_filtered'
+        self.HDFS_DIR_USER = f'hdfs://{self.MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnau_filtered'
+        self.HDFS_DIR_SESSION = f'hdfs://{self.MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnas_filtered'
+        self.HDFS_DIR_HIT = f'hdfs://{self.MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnah_filtered'
 
     # Initialize the spark sessions and return it.
 
@@ -157,9 +157,9 @@ class FilteringPreprocessor:
         session_df.cache()
         hit_df.cache()
 
-        user_df.write.parquet(HDFS_DIR_USER)
-        session_df.write.parquet(HDFS_DIR_SESSION)
-        hit_df.write.parquet(HDFS_DIR_HIT)
+        user_df.write.parquet(self.HDFS_DIR_USER)
+        session_df.write.parquet(self.HDFS_DIR_SESSION)
+        hit_df.write.parquet(self.HDFS_DIR_HIT)
 
         save_options_ga_epnau_features_filtered = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
