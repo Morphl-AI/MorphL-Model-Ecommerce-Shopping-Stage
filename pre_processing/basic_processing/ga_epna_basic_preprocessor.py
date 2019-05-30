@@ -334,10 +334,6 @@ class BasicPreprocessor:
     # Save the raw dfs to Cassandra tables.
     def save_raw_data(self, user_data, session_data, hit_data):
 
-        user_data.cache()
-        session_data.cache()
-        hit_data.cache()
-
         save_options_ga_epnau_features_raw = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
             'table': ('ga_epnau_features_raw')
@@ -370,137 +366,6 @@ class BasicPreprocessor:
             .format('org.apache.spark.sql.cassandra')
             .mode('append')
             .options(**save_options_ga_epnah_features_raw)
-            .save())
-
-    def filter_data(self, users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits_df):
-
-        # Get all the ids that have the required shopping stages.
-        ids_with_stages = shopping_stages_df.select('client_id').distinct()
-
-        # Cache this df since it will be used numerous times.
-        ids_with_stages.cache()
-
-        # Filter users by ids with shopping stages.
-        filtered_users_df = (users_df.
-                             drop('day_of_data_capture').
-                             join(ids_with_stages, 'client_id', 'inner')
-                             )
-
-        filtered_users_df.repartition(32)
-
-        # Filter mobile brand users by ids with shopping stages.
-        filtered_mobile_brand_df = (mobile_brand_df.
-                                    drop('day_of_data_capture', 'sessions').
-                                    join(ids_with_stages, 'client_id', 'inner')
-                                    )
-
-        filtered_mobile_brand_df.repartition(32)
-
-        # Filter hits by ids with shopping stages.
-        filtered_hits_df = (hits_df.
-                            drop('day_of_data_capture').
-                            join(ids_with_stages, 'client_id', 'inner')
-                            )
-
-        filtered_hits_df.repartition(32)
-
-        # Aggregate users data since it is spread out on
-        # multiple days of data capture.
-        aggregated_users_df = (filtered_users_df.
-                               groupBy('client_id').
-                               agg(
-                                   f.first('device_category').alias(
-                                       'device_category'),
-                                   f.first('browser').alias('browser'),
-                                   f.sum('bounces').alias('bounces'),
-                                   f.sum('sessions').alias('sessions'),
-                                   f.sum('revenue_per_user').alias(
-                                       'revenue_per_user'),
-                                   f.sum('transactions_per_user').alias(
-                                       'transactions_per_user')
-                               )
-                               )
-
-        aggregated_users_df.repartition(32)
-
-        # Group shopping stages per session into a set.
-        grouped_shopping_stages_df = (shopping_stages_df.
-                                      groupBy('session_id').
-                                      agg(f.collect_set('shopping_stage').alias(
-                                          'shopping_stage'))
-                                      )
-
-        # Remove user duplicates and get their respective mobile device brand.
-        grouped_mobile_brand_df = (filtered_mobile_brand_df.
-                                   groupBy('client_id').
-                                   agg(f.first('mobile_device_branding').alias(
-                                       'mobile_device_branding'))
-                                   )
-
-        # Add the mobile data to uses that have a mobile device, otherwise
-        # make the column equal to (not set).
-        final_users_df = (aggregated_users_df.
-                          join(grouped_mobile_brand_df,
-                               'client_id', 'left_outer')
-                          .na.fill({
-                              'mobile_device_branding': '(not set)'})
-                          )
-
-        final_users_df.repartition(32)
-
-        # Add the shopping stage data to hits by session id.
-        final_hits_df = filtered_hits_df.join(
-            grouped_shopping_stages_df, 'session_id', 'left_outer')
-
-        final_hits_df.repartition(32)
-
-        # Remove sessions that have a duration equal to 0.
-        final_sessions_df = sessions_df.drop(
-            'day_of_data_capture').filter('session_duration > 0')
-
-        final_sessions_df.repartition(32)
-
-        return {
-            'user_data': final_users_df,
-            'session_data': final_sessions_df,
-            'hit_data': final_hits_df
-        }
-
-    # Save filtered data to Cassandra.
-    def save_filtered_data(self, dfs_dict):
-
-        save_options_ga_epnau_features_filtered = {
-            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
-            'table': ('ga_epnau_features_filtered')
-        }
-        save_options_ga_epnas_features_filtered = {
-            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
-            'table': ('ga_epnas_features_filtered')
-        }
-        save_options_ga_epnah_features_filtered = {
-            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
-            'table': ('ga_epnah_features_filtered')
-        }
-
-        (dfs_dict['user_data']
-            .write
-            .format('org.apache.spark.sql.cassandra')
-            .mode('append')
-            .options(**save_options_ga_epnau_features_filtered)
-            .save())
-
-        (dfs_dict['session_data']
-            .write
-            .format('org.apache.spark.sql.cassandra')
-            .mode('append')
-            .options(**save_options_ga_epnas_features_filtered)
-            .save())
-
-        (dfs_dict['hit_data']
-            .write
-            .format('org.apache.spark.sql.cassandra')
-            .mode('append')
-            .options(**save_options_ga_epnah_features_filtered)
             .save())
 
     def main(self):
@@ -567,13 +432,6 @@ class BasicPreprocessor:
                                                      self.primary_key['ga_epnah_df'],
                                                      self.field_baselines['ga_epnah_df'])
 
-        # Dfs that do not need parsing and can just be retrieved from Cassandra.
-        mobile_brand_df = self.fetch_from_cassandra(
-            'ga_epna_users_mobile_brand', spark_session)
-
-        shopping_stages_df = self.fetch_from_cassandra(
-            'ga_epna_sessions_shopping_stages', spark_session)
-
         users_df = (
             processed_users_dict['result_df']
         )
@@ -585,16 +443,6 @@ class BasicPreprocessor:
         hits_df = (
             processed_hits_dict['result_df']
         )
-
-        # Save raw data to Cassandra.
-        self.save_raw_data(users_df, sessions_df, hits_df)
-
-        # Get all the filtered dfs.
-        processed_data_dfs = self.filter_data(
-            users_df, mobile_brand_df,  sessions_df, shopping_stages_df, hits_df)
-
-        # Save filtered dfs to Cassandra.
-        self.save_filtered_data(processed_data_dfs)
 
 
 if __name__ == '__main__':
