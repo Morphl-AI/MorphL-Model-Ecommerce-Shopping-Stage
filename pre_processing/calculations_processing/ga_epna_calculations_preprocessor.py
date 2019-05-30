@@ -6,6 +6,10 @@ class CalculationsPreprocessor:
 
     def __init__(self):
 
+        HDFS_PORT = 9000
+        PREDICTION_DAY_AS_STR = getenv('PREDICTION_DAY_AS_STR')
+        UNIQUE_HASH = getenv('UNIQUE_HASH')
+
         self.MASTER_URL = 'local[*]'
         self.APPLICATION_NAME = 'calculations_preprocessor'
 
@@ -13,6 +17,12 @@ class CalculationsPreprocessor:
         self.MORPHL_CASSANDRA_USERNAME = getenv('MORPHL_CASSANDRA_USERNAME')
         self.MORPHL_CASSANDRA_PASSWORD = getenv('MORPHL_CASSANDRA_PASSWORD')
         self.MORPHL_CASSANDRA_KEYSPACE = getenv('MORPHL_CASSANDRA_KEYSPACE')
+
+        self.HDFS_DIR_USER = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnau_filtered'
+        self.HDFS_DIR_SESSION = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnas_filtered'
+        self.HDFS_DIR_HIT = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnah_filtered'
+
+        self.HDFS_DIR_CALCULATED_FEATURES = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_calculated_features'
 
     # Initialize the spark sessions and return it.
     def get_spark_session(self):
@@ -31,20 +41,6 @@ class CalculationsPreprocessor:
         log4j.LogManager.getRootLogger().setLevel(log4j.Level.ERROR)
 
         return spark_session
-
-    # Return a spark dataframe from a specified Cassandra table.
-    def fetch_from_cassandra(self, c_table_name, spark_session):
-
-        load_options = {
-            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
-            'table': c_table_name,
-            'spark.cassandra.input.fetch.size_in_rows': '150'}
-
-        df = (spark_session.read.format('org.apache.spark.sql.cassandra')
-                                .options(**load_options)
-                                .load())
-
-        return df
 
     def calculate_browser_device_features(self, users_df, sessions_df):
 
@@ -170,17 +166,14 @@ class CalculationsPreprocessor:
         spark_session = self.get_spark_session()
 
         # Fetch filtered dfs from Cassandra
-        ga_epnau_features_filtered_df = self.fetch_from_cassandra(
-            'ga_epnau_features_filtered', spark_session
-        )
+        ga_epnau_features_filtered_df = spark_session.read.parquet(
+            self.HDFS_DIR_USER_FILTERED)
 
-        ga_epnas_features_filtered_df = self.fetch_from_cassandra(
-            'ga_epnas_features_filtered', spark_session
-        )
+        ga_epnas_features_filtered_df = spark_session.read.parquet(
+            self.HDFS_DIR_SESSION_FILTERED)
 
-        ga_epnah_features_filtered_df = self.fetch_from_cassandra(
-            'ga_epnah_features_filtered', spark_session
-        )
+        ga_epnah_features_filtered_df = spark_session.read.parquet(
+            self.HDFS_DIR_HIT_FILTERED)
 
         # Calculate revenue by device and revenue by browser columns
         users_df = self.calculate_browser_device_features(
@@ -216,6 +209,10 @@ class CalculationsPreprocessor:
         # Replace single product views with all visits
         final_data = self.replace_single_product_views(
             final_data).repartition(32)
+
+        final_data.cache()
+
+        final_data.write.parquet(self.HDFS_DIR_CALCULATED_FEATURES)
 
         save_options_ga_epna_calculated_features = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
