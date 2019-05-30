@@ -165,7 +165,7 @@ class CalculationsPreprocessor:
         # Initialize spark session
         spark_session = self.get_spark_session()
 
-        # Fetch filtered dfs from Cassandra
+        # Fetch dfs from hadoop
         ga_epnau_features_filtered_df = spark_session.read.parquet(
             self.HDFS_DIR_USER_FILTERED)
 
@@ -212,8 +212,10 @@ class CalculationsPreprocessor:
 
         final_data.cache()
 
+        # Save to hadoop
         final_data.write.parquet(self.HDFS_DIR_CALCULATED_FEATURES)
 
+        # Save to Cassandra
         save_options_ga_epna_calculated_features = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
             'table': ('ga_epna_calculated_features')

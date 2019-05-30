@@ -23,7 +23,6 @@ class FilteringPreprocessor:
         self.HDFS_DIR_HIT = f'hdfs://{self.MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnah_filtered'
 
     # Initialize the spark sessions and return it.
-
     def get_spark_session(self):
 
         spark_session = (
@@ -43,7 +42,6 @@ class FilteringPreprocessor:
         return spark_session
 
     # Return a spark dataframe from a specified Cassandra table.
-
     def fetch_from_cassandra(self, c_table_name, spark_session):
 
         load_options = {
@@ -153,6 +151,7 @@ class FilteringPreprocessor:
 
     def save_filtered_data(self, user_df, session_df, hit_df):
 
+        # Cache and save data to Hadoop
         user_df.cache()
         session_df.cache()
         hit_df.cache()
@@ -174,6 +173,7 @@ class FilteringPreprocessor:
             'table': ('ga_epnah_features_filtered')
         }
 
+        # Save data to Cassandra
         (user_df
          .write
          .format('org.apache.spark.sql.cassandra')
