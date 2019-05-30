@@ -74,7 +74,9 @@ class CalculationsPreprocessor:
                                          'device_revenue_per_transaction',
                                          transactions_by_device_df.transaction_revenue /
                                          (transactions_by_device_df.transactions + 1e-5)
-                                     ))
+                                     )
+                                     .drop('transactions', 'transaction_revenue')
+                                     )
 
         # Aggregate transactions and revenue by browser
         transactions_by_browser_df = (users_sessions_df
@@ -92,7 +94,9 @@ class CalculationsPreprocessor:
                                           'browser_revenue_per_transaction',
                                           transactions_by_browser_df.transaction_revenue /
                                           (transactions_by_browser_df.transactions + 1e-5)
-                                      ))
+                                      )
+                                      .drop('transactions', 'transaction_revenue')
+                                      )
 
         # Merge new columns into main df and return them
         return (users_df
@@ -213,7 +217,17 @@ class CalculationsPreprocessor:
         final_data = self.replace_single_product_views(
             final_data).repartition(32)
 
-        final_data.show()
+        save_options_ga_epna_calculated_features = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epna_calculated_features')
+        }
+
+        (final_data
+            .write
+            .format('org.apache.spark.sql.cassandra')
+            .mode('append')
+            .options(**save_options_ga_epna_calculated_features)
+            .save())
 
 
 if __name__ == '__main__':
