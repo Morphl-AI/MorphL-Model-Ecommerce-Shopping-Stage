@@ -6,6 +6,10 @@ class FilteringPreprocessor:
 
     def __init__(self):
 
+        HDFS_PORT = 9000
+        PREDICTION_DAY_AS_STR = getenv('PREDICTION_DAY_AS_STR')
+        UNIQUE_HASH = getenv('UNIQUE_HASH')
+
         self.MASTER_URL = 'local[*]'
         self.APPLICATION_NAME = 'calculations_preprocessor'
 
@@ -14,8 +18,14 @@ class FilteringPreprocessor:
         self.MORPHL_CASSANDRA_PASSWORD = getenv('MORPHL_CASSANDRA_PASSWORD')
         self.MORPHL_CASSANDRA_KEYSPACE = getenv('MORPHL_CASSANDRA_KEYSPACE')
 
+        self.HDFS_DIR_USER = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnau_filtered'
+        self.HDFS_DIR_SESSION = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnas_filtered'
+        self.HDFS_DIR_HIT = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnah_filtered'
+
     # Initialize the spark sessions and return it.
+
     def get_spark_session(self):
+
         spark_session = (
             SparkSession.builder
             .appName(self.APPLICATION_NAME)
@@ -33,6 +43,7 @@ class FilteringPreprocessor:
         return spark_session
 
     # Return a spark dataframe from a specified Cassandra table.
+
     def fetch_from_cassandra(self, c_table_name, spark_session):
 
         load_options = {
@@ -41,8 +52,8 @@ class FilteringPreprocessor:
             'spark.cassandra.input.fetch.size_in_rows': '150'}
 
         df = (spark_session.read.format('org.apache.spark.sql.cassandra')
-                                .options(**load_options)
-                                .load())
+              .options(**load_options)
+              .load())
 
         return df
 
@@ -140,6 +151,50 @@ class FilteringPreprocessor:
             'hit_data': final_hits_df
         }
 
+    def save_filtered_data(self, user_df, session_df, hit_df):
+
+        user_df.cache()
+        session_df.cache()
+        hit_df.cache()
+
+        user_df.write.parquet(HDFS_DIR_USER)
+        session_df.write.parquet(HDFS_DIR_SESSION)
+        hit_df.write.parquet(HDFS_DIR_HIT)
+
+        save_options_ga_epnau_features_filtered = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epnau_features_filtered')
+        }
+        save_options_ga_epnas_features_filtered = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epnas_features_filtered')
+        }
+        save_options_ga_epnah_features_filtered = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epnah_features_filtered')
+        }
+
+        (user_df
+         .write
+         .format('org.apache.spark.sql.cassandra')
+         .mode('append')
+         .options(**save_options_ga_epnau_features_filtered)
+         .save())
+
+        (session_df
+         .write
+         .format('org.apache.spark.sql.cassandra')
+         .mode('append')
+         .options(**save_options_ga_epnas_features_filtered)
+         .save())
+
+        (hit_df
+         .write
+         .format('org.apache.spark.sql.cassandra')
+         .mode('append')
+         .options(**save_options_ga_epnah_features_filtered)
+         .save())
+
     def main(self):
 
         spark_session = self.get_spark_session()
@@ -170,40 +225,6 @@ class FilteringPreprocessor:
             shopping_stages_df,
             ga_epnah_features_raw
         ))
-
-        save_options_ga_epnau_features_filtered = {
-            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
-            'table': ('ga_epnau_features_filtered')
-        }
-        save_options_ga_epnas_features_filtered = {
-            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
-            'table': ('ga_epnas_features_filtered')
-        }
-        save_options_ga_epnah_features_filtered = {
-            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
-            'table': ('ga_epnah_features_filtered')
-        }
-
-        (filtered_data_dfs['user_data']
-            .write
-            .format('org.apache.spark.sql.cassandra')
-            .mode('append')
-            .options(**save_options_ga_epnau_features_filtered)
-            .save())
-
-        (filtered_data_dfs['session_data']
-            .write
-            .format('org.apache.spark.sql.cassandra')
-            .mode('append')
-            .options(**save_options_ga_epnas_features_filtered)
-            .save())
-
-        (filtered_data_dfs['hit_data']
-            .write
-            .format('org.apache.spark.sql.cassandra')
-            .mode('append')
-            .options(**save_options_ga_epnah_features_filtered)
-            .save())
 
 
 if __name__ == '__main__':
