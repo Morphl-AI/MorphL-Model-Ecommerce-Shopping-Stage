@@ -444,6 +444,8 @@ class BasicPreprocessor:
             processed_hits_dict['result_df']
         )
 
+        self.save_raw_data(users_df, sessions_df, hits_df)
+
 
 if __name__ == '__main__':
     preprocessor = BasicPreprocessor()
