@@ -58,34 +58,49 @@ class FilteringPreprocessor:
     def filter_data(self, users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits_df):
 
         # Get all the ids that have the required shopping stages.
-        ids_with_stages = shopping_stages_df.select('client_id').distinct()
+        client_ids_with_stages = shopping_stages_df.select(
+            'client_id').distinct()
+        session_ids_with_stages = shopping_stages_df.select(
+            'session_id').distinct()
 
-        # Cache this df since it will be used numerous times.
-        ids_with_stages.cache()
+        # Cache these dfs since they will be used numerous times.
+        client_ids_with_stages.cache()
+        session_ids_with_stages.cache()
 
-        # Filter users by ids with shopping stages.
+        # Filter users by client ids with shopping stages.
         filtered_users_df = (users_df.
                              drop('day_of_data_capture').
-                             join(ids_with_stages, 'client_id', 'inner')
+                             join(client_ids_with_stages, 'client_id', 'inner')
                              )
 
         filtered_users_df.repartition(32)
 
-        # Filter mobile brand users by ids with shopping stages.
+        # Filter mobile brand users by client ids with shopping stages.
         filtered_mobile_brand_df = (mobile_brand_df.
                                     drop('day_of_data_capture', 'sessions').
-                                    join(ids_with_stages, 'client_id', 'inner')
+                                    join(client_ids_with_stages,
+                                         'client_id', 'inner')
                                     )
 
         filtered_mobile_brand_df.repartition(32)
 
-        # Filter hits by ids with shopping stages.
+        # Filter hits by session ids with shopping stages.
         filtered_hits_df = (hits_df.
                             drop('day_of_data_capture').
-                            join(ids_with_stages, 'client_id', 'inner')
+                            join(session_ids_with_stages,
+                                 'session_id', 'inner')
                             )
 
         filtered_hits_df.repartition(32)
+
+        # Filter sessions by session ids with shopping stages.
+        filtered_sessions_df = (sessions_df.
+                                drop('day_of_data_capture').
+                                join(session_ids_with_stages,
+                                     'session_id', 'inner')
+                                )
+
+        filtered_sessions_df.repartition(32)
 
         # Aggregate users data since it is spread out on
         # multiple days of data capture.
@@ -138,8 +153,7 @@ class FilteringPreprocessor:
         final_hits_df.repartition(32)
 
         # Remove sessions that have a duration equal to 0.
-        final_sessions_df = sessions_df.drop(
-            'day_of_data_capture').filter('session_duration > 0')
+        final_sessions_df = filtered_sessions_df.filter('session_duration > 0')
 
         final_sessions_df.repartition(32)
 
