@@ -206,12 +206,12 @@ class CalculationsPreprocessor:
         # Aggregate all transactions to a single output
         final_data = self.aggregate_transactions(final_data)
 
-        # Remove shopping stage outliers
-        final_data = self.remove_outliers(final_data)
-
         # Replace single product views with all visits
         final_data = self.replace_single_product_views(
-            final_data).repartition(32)
+            final_data)
+
+        # Remove shopping stage outliers
+        final_data = self.remove_outliers(final_data).repartition(32)
 
         final_data.cache()
 
