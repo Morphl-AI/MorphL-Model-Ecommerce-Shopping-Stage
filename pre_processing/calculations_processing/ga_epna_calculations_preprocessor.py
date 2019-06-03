@@ -123,32 +123,35 @@ class CalculationsPreprocessor:
     # Remove outlying shopping stages
     def remove_outliers(self, df):
 
-        # Get the counts for all unique shopping stages
-        unique_stages_counts = (df
-                                .groupBy('shopping_stage')
-                                .agg(
-                                    f.countDistinct('client_id')
-                                    .alias('stages_count')
-                                ))
+        # # Get the counts for all unique shopping stages
+        # unique_stages_counts = (df
+        #                         .groupBy('shopping_stage')
+        #                         .agg(
+        #                             f.countDistinct('client_id')
+        #                             .alias('stages_count')
+        #                         ))
 
-        unique_stages_counts.cache()
+        # unique_stages_counts.cache()
 
-        # Calculate the threshold for outliers
-        outlier_threshold = max(unique_stages_counts.agg(
-            f.sum('stages_count')).collect()[0][0] / 1000, 20)
+        # # Calculate the threshold for outliers
+        # outlier_threshold = max(unique_stages_counts.agg(
+        #     f.sum('stages_count')).collect()[0][0] / 1000, 20)
 
-        # Get a list of all shopping stages bellow the threshold
-        list_of_outlier_stages = (unique_stages_counts
-                                  .select('shopping_stage')
-                                  .where(unique_stages_counts.stages_count < outlier_threshold)
-                                  .rdd
-                                  .flatMap(lambda stage: stage)
-                                  .collect()
-                                  )
+        # # Get a list of all shopping stages bellow the threshold
+        # list_of_outlier_stages = (unique_stages_counts
+        #                           .select('shopping_stage')
+        #                           .where(unique_stages_counts.stages_count < outlier_threshold)
+        #                           .rdd
+        #                           .flatMap(lambda stage: stage)
+        #                           .collect()
+        #                           )
+
+        stages_to_keep = ['ALL_VISITS', 'ALL_VISITS|PRODUCT_VIEW', 'ALL_VISITS|PRODUCT_VIEW|ADD_TO_CART',
+                          'ALL_VISITS|PRODUCT_VIEW|ADD_TO_CART|CHECKOUT', 'ALL_VISITS|PRODUCT_VIEW|CHECKOUT', 'TRANSACTION']
 
         # Replace all outlying shopping stages with ALL_VISITS
         remove_outliers_udf = f.udf(
-            lambda stages: stages if stages not in list_of_outlier_stages else 'ALL_VISITS', 'string')
+            lambda stages: stages if stages in stages_to_keep else 'ALL_VISITS', 'string')
 
         return df.withColumn('shopping_stage', remove_outliers_udf('shopping_stage'))
 
