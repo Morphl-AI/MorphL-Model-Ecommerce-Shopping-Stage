@@ -432,17 +432,14 @@ class BasicPreprocessor:
                                                      self.primary_key['ga_epnah_df'],
                                                      self.field_baselines['ga_epnah_df'])
 
-        users_df = (
-            processed_users_dict['result_df']
-        )
+        users_df = processed_users_dict['result_df']
+ 
 
-        sessions_df = (
-            processed_sessions_dict['result_df']
-        )
+        sessions_df = processed_sessions_dict['result_df']
+        
 
-        hits_df = (
-            processed_hits_dict['result_df']
-        )
+        hits_df = processed_hits_dict['result_df']
+        
 
         self.save_raw_data(users_df, sessions_df, hits_df)
 
