@@ -182,54 +182,56 @@ class CalculationsPreprocessor:
         users_df = self.calculate_browser_device_features(
             ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
 
-        # Merge users and sessions together
-        users_sessions_data = (users_df
-                               .join(
-                                   ga_epnas_features_filtered_df,
-                                   'client_id',
-                                   'inner'
-                               )
-                               .repartition(32))
-
-        # Merge users_sessions data with hits data
-        final_data = (ga_epnah_features_filtered_df
-                      .join(
-                          users_sessions_data,
-                          ['client_id', 'session_id'],
-                          'inner'
-                      )
-                      .repartition(32))
-
         # Format shopping stages as strings
-        final_data = self.format_shopping_stages(final_data)
+        hits_df = self.format_shopping_stages(ga_epnah_features_filtered_df)
 
         # Aggregate all transactions to a single output
-        final_data = self.aggregate_transactions(final_data)
+        hits_df = self.aggregate_transactions(hits_df)
 
         # Replace single product views with all visits
-        final_data = self.replace_single_product_views(
-            final_data)
+        hits_data = self.replace_single_product_views(
+            hits_data)
 
         # Remove shopping stage outliers
-        final_data = self.remove_outliers(final_data).repartition(32)
+        hits_data = self.remove_outliers(hits_data).repartition(32)
 
-        final_data.cache()
+        client_ids_session_counts = (ga_epnas_features_filtered_df
+                                     .groupBy('client_id')
+                                     .agg(
+                                         f.first('client_id').alias(
+                                             'client_id'),
+                                         f.countDistinct('session_id').alias(
+                                             'session_count')
+                                     )
+                                     )
 
-        # Save to hadoop
-        final_data.write.parquet(self.HDFS_DIR_CALCULATED_FEATURES)
+        ga_epna_data_hits = (hits_data.
+                             select(
+                                 'client_id',
+                                 'session_id',
+                                 f.arrray(
+                                     f.col('time_on_page'),
+                                     f.col('product_list_clicks'),
+                                     f.col('product_list_views'),
+                                     f.col('product_detail_views')
+                                 ).alias('hits_features').
+                                 groupBy('session_id').
+                                 agg(
+                                     f.first('client_id').alias('client_id'),
+                                     f.collect_list('hit_features').alias(
+                                         'hit_features'),
 
-        # Save to Cassandra
-        save_options_ga_epna_calculated_features = {
-            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
-            'table': ('ga_epna_calculated_features')
-        }
-
-        (final_data
-            .write
-            .format('org.apache.spark.sql.cassandra')
-            .mode('append')
-            .options(**save_options_ga_epna_calculated_features)
-            .save())
+                                 ).
+                                 groupBy('client_Id'),
+                                 agg(
+                                     f.collect_list(
+                                         'hit_features').alias('features')
+                                 )
+                             ).
+                             join(
+                                 client_ids_session_counts, 'client_id', 'left_outter'
+                             ).repartition(32)
+                             )
 
 
 if __name__ == '__main__':
