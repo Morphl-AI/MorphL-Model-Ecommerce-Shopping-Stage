@@ -63,14 +63,37 @@ class FilteringPreprocessor:
         session_ids_with_stages = shopping_stages_df.select(
             'session_id').distinct()
 
+        # Get all distinct client ids for users, sessions and hits.
+        client_ids_users = users_df.select('client_id').distinct()
+        client_ids_sessions = sessions_df.select(
+            'client_id').distinct()
+        client_ids_hits = hits_df.select('client_id').distinct()
+
+        # Get client_ids that exist in all dfs
+        complete_client_ids = (client_ids_users
+                               .join(
+                                   client_ids_sessions,
+                                   'client_id',
+                                   'inner')
+                               .join(
+                                   client_ids_hits,
+                                   'client_id',
+                                   'inner')
+                               .join(
+                                   client_ids_with_stages,
+                                   'client_id',
+                                   'inner'
+                               )
+                               )
+
         # Cache these dfs since they will be used numerous times.
-        client_ids_with_stages.cache()
         session_ids_with_stages.cache()
+        complete_client_ids.cache()
 
         # Filter users by client ids with shopping stages.
         filtered_users_df = (users_df.
                              drop('day_of_data_capture').
-                             join(client_ids_with_stages, 'client_id', 'inner')
+                             join(complete_client_ids, 'client_id', 'inner')
                              )
 
         filtered_users_df.repartition(32)
@@ -78,7 +101,7 @@ class FilteringPreprocessor:
         # Filter mobile brand users by client ids with shopping stages.
         filtered_mobile_brand_df = (mobile_brand_df.
                                     drop('day_of_data_capture', 'sessions').
-                                    join(client_ids_with_stages,
+                                    join(complete_client_ids,
                                          'client_id', 'inner')
                                     )
 
@@ -88,7 +111,9 @@ class FilteringPreprocessor:
         filtered_hits_df = (hits_df.
                             drop('day_of_data_capture').
                             join(session_ids_with_stages,
-                                 'session_id', 'inner')
+                                 'session_id', 'inner').
+                            join(complete_client_ids,
+                                 'client_id', 'inner')
                             )
 
         filtered_hits_df.repartition(32)
@@ -97,6 +122,8 @@ class FilteringPreprocessor:
         filtered_sessions_df = (sessions_df.
                                 drop('day_of_data_capture').
                                 join(session_ids_with_stages,
+                                     'session_id', 'inner').
+                                join(complete_client_ids,
                                      'session_id', 'inner')
                                 )
 
