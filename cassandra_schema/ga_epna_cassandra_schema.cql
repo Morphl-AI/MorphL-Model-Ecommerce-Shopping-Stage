@@ -132,38 +132,11 @@ CREATE TABLE morphl.ga_epnah_features_filtered(
   PRIMARY KEY ((client_id),session_id, hit_id)
 );
 
-CREATE TABLE morphl.ga_epna_calculated_features(
+CREATE TABLE morphl.ga_epna_data_hits(
   client_id text,
-  session_id text,
-  hit_id text, 
-  device_category text,
-  browser text,
-  sessions double, 
-  bounces double,
-  revenue_per_user double, 
-  device_revenue_per_transaction double,
-  browser_revenue_per_transaction double,
-  transactions_per_user double,
-  mobile_device_branding text,
-  search_used text,
-  days_since_last_session double,
-  session_duration double, 
-  unique_page_views double, 
-  transactions double, 
-  transaction_revenue double, 
-  unique_purchases double,
-  search_result_views double,
-  search_uniques double,
-  search_depth double, 
-  search_refinements double, 
-  user_type text,
-  date_hour_minute text,
-  time_on_page double,
-  product_list_clicks double,
-  product_list_views double,
-  product_detail_views double,
-  shopping_stage text,
-  PRIMARY KEY ((client_id),session_id,hit_id)
+  sesion_count double, 
+  features frozen<list<frozen<list<<frozen<list<double>>>>>>>
+  PRIMARY KEY((client_id), session_count)
 )
 
 CREATE TABLE morphl.ga_epna_config_parameters (
