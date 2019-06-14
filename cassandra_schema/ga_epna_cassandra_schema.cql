@@ -134,11 +134,11 @@ CREATE TABLE morphl.ga_epnah_features_filtered(
   PRIMARY KEY ((client_id),session_id, hit_id)
 );
 
- CREATE TABLE morphl.exga_epna_data_hits(
-    lient_id text,
+ CREATE TABLE morphl.ga_epna_data_hits(
+    client_id text,
     session_count double, 
     features frozen<list<frozen<list<frozen<list<double>>>>>>,
-    PRIMARY KEY((client_id), session_count)
+    PRIMARY KEY((session_count), client_id)
   );
 
 CREATE TABLE morphl.ga_epna_config_parameters (
