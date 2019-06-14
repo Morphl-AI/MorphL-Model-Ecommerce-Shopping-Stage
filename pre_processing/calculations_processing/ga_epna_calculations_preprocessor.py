@@ -1,5 +1,6 @@
 from os import getenv
 from pyspark.sql import functions as f, SparkSession
+from pyspark.sql.types import DoubleType
 
 
 class CalculationsPreprocessor:
@@ -253,7 +254,11 @@ class CalculationsPreprocessor:
                              .repartition(32)
                              )
 
+        search_encoding = f.udf(
+            lambda x: 0.0 if x == 'Visits With Site Search' else 1.0, DoubleType())
+
         ga_epna_data_sessions = (ga_epnas_features_filtered_df.
+                                 withColumn('search_used', search_encoding('search_used')).
                                  select(
                                      'client_id',
                                      'session_id',
@@ -273,8 +278,7 @@ class CalculationsPreprocessor:
                                  ).groupBy('client_id')
                                  .agg(
                                      f.collect_list('session_features').alias(
-                                         'session_features')
-
+                                         'features')
                                  ).join(
                                      client_ids_session_counts, 'client_id', 'inner'
                                  )
