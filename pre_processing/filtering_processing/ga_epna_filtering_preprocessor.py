@@ -179,14 +179,9 @@ class FilteringPreprocessor:
 
         final_hits_df.repartition(32)
 
-        # Remove sessions that have a duration equal to 0.
-        final_sessions_df = filtered_sessions_df.filter('session_duration > 0')
-
-        final_sessions_df.repartition(32)
-
         return {
             'user': final_users_df,
-            'session': final_sessions_df,
+            'session': filtered_sessions_df,
             'hit': final_hits_df
         }
 
