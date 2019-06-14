@@ -79,6 +79,7 @@ CREATE TABLE morphl.ga_epnah_features_raw(
   client_id text,
   day_of_data_capture date,
   session_id text,
+  user_type text,
   hit_id text, 
   date_hour_minute text,
   time_on_page double,
@@ -124,6 +125,7 @@ CREATE TABLE morphl.ga_epnah_features_filtered(
   session_id text,
   hit_id text, 
   date_hour_minute text,
+  user_type text,
   time_on_page double,
   product_list_clicks double,
   product_list_views double,
@@ -132,12 +134,12 @@ CREATE TABLE morphl.ga_epnah_features_filtered(
   PRIMARY KEY ((client_id),session_id, hit_id)
 );
 
-CREATE TABLE morphl.ga_epna_data_hits(
-  client_id text,
-  sesion_count double, 
-  features frozen<list<frozen<list<<frozen<list<double>>>>>>>
-  PRIMARY KEY((client_id), session_count)
-)
+ CREATE TABLE morphl.exga_epna_data_hits(
+    lient_id text,
+    session_count double, 
+    features frozen<list<frozen<list<frozen<list<double>>>>>>,
+    PRIMARY KEY((client_id), session_count)
+  );
 
 CREATE TABLE morphl.ga_epna_config_parameters (
   morphl_component_name text,

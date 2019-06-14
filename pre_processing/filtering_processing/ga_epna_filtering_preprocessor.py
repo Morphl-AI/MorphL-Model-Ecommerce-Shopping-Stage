@@ -124,7 +124,7 @@ class FilteringPreprocessor:
                                 join(session_ids_with_stages,
                                      'session_id', 'inner').
                                 join(complete_client_ids,
-                                     'session_id', 'inner')
+                                     'client_id', 'inner')
                                 )
 
         filtered_sessions_df.repartition(32)

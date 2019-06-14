@@ -107,10 +107,6 @@ class BasicPreprocessor:
              'original_name': 'ga:searchResultViews',
              'needs_conversion': True,
              },
-            {'field_name': 'user_type',
-             'original_name': 'ga:userType',
-             'needs_conversion': False,
-             },
             {'field_name': 'search_uniques',
              'original_name': 'ga:searchUniques',
              'needs_conversion': True,
@@ -147,6 +143,10 @@ class BasicPreprocessor:
             {'field_name': 'product_list_views',
              'original_name': 'ga:productListViews',
              'needs_conversion': True,
+             },
+            {'field_name': 'user_type',
+             'original_name': 'ga:userType',
+             'needs_conversion': False,
              },
             {'field_name': 'product_detail_views',
              'original_name': 'ga:productDetailViews',
@@ -433,13 +433,10 @@ class BasicPreprocessor:
                                                      self.field_baselines['ga_epnah_df'])
 
         users_df = processed_users_dict['result_df']
- 
 
         sessions_df = processed_sessions_dict['result_df']
-        
 
         hits_df = processed_hits_dict['result_df']
-        
 
         self.save_raw_data(users_df, sessions_df, hits_df)
 
