@@ -146,6 +146,13 @@ CREATE TABLE morphl.ga_epna_data_sessions(
   PRIMARY KEY((session_count), client_id)
 )
 
+CREATE TABLE morphl.ga_epna_data_shopping_stages(
+  client_id text,
+  session_count double, 
+  shopping_stages frozen<list<frozen<list<text>>>>,
+  PRIMARY KEY((session_count), client_id)
+)
+
 CREATE TABLE morphl.ga_epna_config_parameters (
   morphl_component_name text,
   parameter_name text,

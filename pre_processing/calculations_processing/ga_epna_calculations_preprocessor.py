@@ -164,7 +164,7 @@ class CalculationsPreprocessor:
 
         return df.withColumn('shopping_stage', replace_single_product_view_udf('shopping_stage'))
 
-    def save_data(self, hits_data, session_data):
+    def save_data(self, hits_data, session_data, shopping_stages_data):
 
         save_options_ga_epna_data_hits = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
@@ -174,6 +174,11 @@ class CalculationsPreprocessor:
         save_options_ga_epna_data_sessions = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
             'table': ('ga_epna_data_sessions')
+        }
+
+        save_options_ga_epna_data_shopping_stages = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epna_data_shopping_stages')
         }
 
         (hits_data
@@ -188,6 +193,13 @@ class CalculationsPreprocessor:
          .format('org.apache.spark.sql.cassandra')
          .mode('append')
          .options(**save_options_ga_epna_data_sessions)
+         .save())
+
+        (shopping_stages_data
+         .write
+         .format('org.apache.spark.sql.cassandra')
+         .mode('append')
+         .options(**save_options_ga_epna_data_shopping_stages)
          .save())
 
     def main(self):
@@ -285,7 +297,20 @@ class CalculationsPreprocessor:
                                  .repartition(32)
                                  )
 
-        self.save_data(ga_epna_data_hits, ga_epna_data_sessions)
+        ga_epna_data_shopping_stages = (ga_epnah_features_filtered_df.
+                                        groupBy('client_id').
+                                        agg(
+                                            f.first('client_id').alias(
+                                                'client_id'),
+                                            f.collect_list('shopping_stage').alias(
+                                                'shopping_stages')
+                                        ).join(
+                                            client_ids_session_counts, 'client_id', 'inner'
+                                        ).repartition(32)
+                                        )
+
+        self.save_data(ga_epna_data_hits, ga_epna_data_sessions,
+                       ga_epna_data_shopping_stages)
 
 
 if __name__ == '__main__':
