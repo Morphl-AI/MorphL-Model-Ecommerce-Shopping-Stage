@@ -164,7 +164,7 @@ class CalculationsPreprocessor:
 
         return df.withColumn('shopping_stage', replace_single_product_view_udf('shopping_stage'))
 
-    def save_data(self, hits_data, session_data, shopping_stages_data):
+    def save_data(self, hits_data, session_data, user_data, shopping_stages_data):
 
         save_options_ga_epna_data_hits = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
@@ -174,6 +174,11 @@ class CalculationsPreprocessor:
         save_options_ga_epna_data_sessions = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
             'table': ('ga_epna_data_sessions')
+        }
+
+        save_options_ga_epna_data_user = {
+            'keypsace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epna_data_users')
         }
 
         save_options_ga_epna_data_shopping_stages = {
@@ -193,6 +198,13 @@ class CalculationsPreprocessor:
          .format('org.apache.spark.sql.cassandra')
          .mode('append')
          .options(**save_options_ga_epna_data_sessions)
+         .save())
+
+        (user_data
+         .write
+         .format('org.apache.spark.sql.cassandra')
+         .mode('append')
+         .options(**save_options_ga_epna_data_user)
          .save())
 
         (shopping_stages_data
@@ -297,6 +309,32 @@ class CalculationsPreprocessor:
                                  .repartition(32)
                                  )
 
+        ga_epna_data_users = (users_df.
+                              withColumn(
+                                  'is_mobile', f.when(
+                                      f.col('device_category') == 'desktop', 1.0).otherwise(0.0)
+                              ).
+                              withColumn(
+                                  'is_tablet', f.when(
+                                      f.col('device_category') == 'tablet', 1.0).otherwise(0.0)
+                              ).
+                              withColumn(
+                                  'is_desktop', f.when(
+                                      f.col('device_category') == 'mobile', 1.0).otherwise(0.0)
+                              ).select(
+                                  'client_id',
+                                  f.array(
+                                      f.col('is_mobile'),
+                                      f.col('is_tablet'),
+                                      f.col('is_desktop'),
+                                      f.col('device_revenue_per_transaction'),
+                                      f.col('browser_revenue_per_transaction')
+                                  )
+                              ).join(
+                                  client_ids_session_counts, 'client_id', 'inner'
+                              ).repartition(32)
+                              )
+
         ga_epna_data_shopping_stages = (ga_epnah_features_filtered_df.
                                         groupBy('client_id').
                                         agg(
@@ -310,7 +348,7 @@ class CalculationsPreprocessor:
                                         )
 
         self.save_data(ga_epna_data_hits, ga_epna_data_sessions,
-                       ga_epna_data_shopping_stages)
+                       ga_epna_data_users, ga_epna_data_shopping_stages)
 
 
 if __name__ == '__main__':
