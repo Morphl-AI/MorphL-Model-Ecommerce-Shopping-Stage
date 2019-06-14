@@ -163,6 +163,32 @@ class CalculationsPreprocessor:
 
         return df.withColumn('shopping_stage', replace_single_product_view_udf('shopping_stage'))
 
+    def save_data(self, hits_data, session_data):
+
+        save_options_ga_epna_data_hits = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epna_data_hits')
+        }
+
+        save_options_ga_epna_data_sessions = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epna_data_sessions')
+        }
+
+        (hits_data
+         .write
+         .format('org.apache.spark.sql.cassandra')
+         .mode('append')
+         .options(**save_options_ga_epna_data_hits)
+         .save())
+
+        (session_data
+         .write
+         .format('org.apache.spark.sql.cassandra')
+         .mode('append')
+         .options(**save_options_ga_epna_data_sessions)
+         .save())
+
     def main(self):
 
         # Initialize spark session
@@ -227,21 +253,35 @@ class CalculationsPreprocessor:
                              .repartition(32)
                              )
 
-        ga_epna_data_hits.cache()
+        ga_epna_data_sessions = (ga_epnas_features_filtered_df.
+                                 select(
+                                     'client_id',
+                                     'session_id',
+                                     f.array(
+                                         f.col('session_duration'),
+                                         f.col('unique_page_views'),
+                                         f.col('transactions'),
+                                         f.col('transaction_revenue'),
+                                         f.col('unique_purchases'),
+                                         f.col('days_since_last_session'),
+                                         f.col('search_used'),
+                                         f.col('search_result_views'),
+                                         f.col('search_uniques'),
+                                         f.col('search_depth'),
+                                         f.col('search_refinements')
+                                     ).alias('session_features')
+                                 ).groupBy('client_id')
+                                 .agg(
+                                     f.collect_list('session_features').alias(
+                                         'session_features')
 
-        ga_epna_data_hits.write.parquet(self.HDFS_DIR_DATA_HITS)
+                                 ).join(
+                                     client_ids_session_counts, 'client_id', 'inner'
+                                 )
+                                 .repartition(32)
+                                 )
 
-        save_options_ga_epna_data_hits = {
-            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
-            'table': ('ga_epna_data_hits')
-        }
-
-        (ga_epna_data_hits
-         .write
-         .format('org.apache.spark.sql.cassandra')
-         .mode('append')
-         .options(**save_options_ga_epna_data_hits)
-         .save())
+        self.save_data(ga_epna_data_hits, ga_epna_data_sessions)
 
 
 if __name__ == '__main__':
