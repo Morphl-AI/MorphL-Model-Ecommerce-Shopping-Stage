@@ -233,7 +233,7 @@ class CalculationsPreprocessor:
 
         save_options_ga_epna_data_hits = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
-            'table': ('exga_epna_data_hits')
+            'table': ('ga_epna_data_hits')
         }
 
         (ga_epna_data_hits
