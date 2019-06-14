@@ -22,7 +22,7 @@ class CalculationsPreprocessor:
         self.HDFS_DIR_SESSION_FILTERED = f'hdfs://{self.MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnas_filtered'
         self.HDFS_DIR_HIT_FILTERED = f'hdfs://{self.MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnah_filtered'
 
-        self.HDFS_DIR_CALCULATED_FEATURES = f'hdfs://{self.MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_calculated_features'
+        self.HDFS_DIR_DATA_HITS = f'hdfs://{self.MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_data_hits'
 
     # Initialize the spark sessions and return it.
     def get_spark_session(self):
@@ -189,49 +189,59 @@ class CalculationsPreprocessor:
         hits_df = self.aggregate_transactions(hits_df)
 
         # Replace single product views with all visits
-        hits_data = self.replace_single_product_views(
-            hits_data)
+        hits_df = self.replace_single_product_views(
+            hits_df)
 
         # Remove shopping stage outliers
-        hits_data = self.remove_outliers(hits_data).repartition(32)
+        hits_df = self.remove_outliers(hits_df).repartition(32)
 
         client_ids_session_counts = (ga_epnas_features_filtered_df
                                      .groupBy('client_id')
                                      .agg(
-                                         f.first('client_id').alias(
-                                             'client_id'),
                                          f.countDistinct('session_id').alias(
                                              'session_count')
                                      )
                                      )
 
-        ga_epna_data_hits = (hits_data.
+        ga_epna_data_hits = (hits_df.
                              select(
                                  'client_id',
                                  'session_id',
-                                 f.arrray(
+                                 f.array(
                                      f.col('time_on_page'),
                                      f.col('product_list_clicks'),
                                      f.col('product_list_views'),
                                      f.col('product_detail_views')
-                                 ).alias('hits_features').
-                                 groupBy('session_id').
-                                 agg(
-                                     f.first('client_id').alias('client_id'),
-                                     f.collect_list('hit_features').alias(
-                                         'hit_features'),
-
-                                 ).
-                                 groupBy('client_Id'),
-                                 agg(
-                                     f.collect_list(
-                                         'hit_features').alias('features')
-                                 )
-                             ).
-                             join(
-                                 client_ids_session_counts, 'client_id', 'left_outter'
-                             ).repartition(32)
+                                 ).alias('hits_features')
+                             ).groupBy('session_id')
+                             .agg(
+                                 f.first('client_id').alias('client_id'),
+                                 f.collect_list('hits_features').alias(
+                                     'hits_features')
+                             ).groupBy('client_id')
+                             .agg(
+                                 f.collect_list(
+                                     'hits_features').alias('features')
+                             ).join(
+                                 client_ids_session_counts, 'client_id', 'inner')
+                             .repartition(32)
                              )
+
+        ga_epna_data_hits.cache()
+
+        ga_epna_data_hits.write.parquet(self.HDFS_DIR_DATA_HITS)
+
+        save_options_ga_epna_data_hits = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('exga_epna_data_hits')
+        }
+
+        (ga_epna_data_hits
+         .write
+         .format('org.apache.spark.sql.cassandra')
+         .mode('append')
+         .options(**save_options_ga_epna_data_hits)
+         .save())
 
 
 if __name__ == '__main__':
