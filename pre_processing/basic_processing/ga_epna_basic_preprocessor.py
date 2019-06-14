@@ -75,7 +75,6 @@ class BasicPreprocessor:
         # transaction_revenue: the amount of money spent on the transactions in a session;
         # unique_purchases: the number of unique items bought by the user in a session;
         # search_result_views: the number of times a search result page was viewed in a session;
-        # user_type: a boolean signifying wether the user is new or returning;
         # search_uniques: total number of unique keywords from internal searches during a session;
         # search_depth: total number of subsequent page views made after an internal search;
         # search_refinements: the number of times a transition occurs between internal keywords search within a session
@@ -131,6 +130,7 @@ class BasicPreprocessor:
 
         # time_on_page: the amount of time a user spent on the page;
         # date_hour_minute: the date, hour and minute the hit occured at.
+        # user_type: a boolean signifying wether the user is new or returning;
         field_baselines['ga_epnah_df'] = [
             {'field_name': 'time_on_page',
              'original_name': 'ga:timeOnPage',
