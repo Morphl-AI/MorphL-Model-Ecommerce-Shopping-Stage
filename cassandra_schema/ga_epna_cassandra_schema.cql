@@ -144,21 +144,21 @@ CREATE TABLE morphl.ga_epna_data_sessions(
   session_count double,
   features frozen<list<frozen<list<double>>>>,
   PRIMARY KEY((session_count), client_id)
-)
+);
 
 CREATE TABLE morphl.ga_epna_data_users(
   client_id text,
   session_count double, 
-  frozen<list<double>>,
+  features frozen<list<double>>,
   PRIMARY KEY((session_count), client_id)
-)
+);
 
 CREATE TABLE morphl.ga_epna_data_shopping_stages(
   client_id text,
   session_count double, 
   shopping_stages frozen<list<frozen<list<text>>>>,
   PRIMARY KEY((session_count), client_id)
-)
+);
 
 
 CREATE TABLE morphl.ga_epna_config_parameters (
