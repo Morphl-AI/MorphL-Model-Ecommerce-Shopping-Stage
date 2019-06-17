@@ -153,6 +153,13 @@ CREATE TABLE morphl.ga_epna_data_users(
   PRIMARY KEY((session_count), client_id)
 );
 
+CREATE TABLE morphl.ga_epna_data_num_hits(
+  client_id text,
+  session_count double,
+  sessions_hits_count frozen<list<double>>,
+  PRIMARY KEY ((session_count), client_id)
+)
+
 CREATE TABLE morphl.ga_epna_data_shopping_stages(
   client_id text,
   session_count double, 
