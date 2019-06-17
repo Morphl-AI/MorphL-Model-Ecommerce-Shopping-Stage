@@ -176,7 +176,7 @@ class CalculationsPreprocessor:
         }
 
         save_options_ga_epna_data_user = {
-            'keypsace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
             'table': ('ga_epna_data_users')
         }
 
@@ -277,11 +277,16 @@ class CalculationsPreprocessor:
                              .repartition(32)
                              )
 
-       
         ga_epna_data_sessions = (ga_epnas_features_filtered_df.
                                  withColumn(
-                                     f.when(f.col('with_site_search') == 'Visits With Site Search', 1.0).otherwise(0.0),
-                                     f.when(f.col('without_site_search') == 'Visits Without Site Search', 1.0).otherwise(0.0),
+                                     'with_site_search',
+                                     f.when(f.col('search_used') == 'Visits With Site Search', 1.0).otherwise(
+                                         0.0)
+                                 ).
+                                 withColumn(
+                                     'without_site_search',
+                                     f.when(f.col('search_used') == 'Visits Without Site Search', 1.0).otherwise(
+                                         0.0)
                                  ).
                                  select(
                                      'client_id',
@@ -330,7 +335,7 @@ class CalculationsPreprocessor:
                                       f.col('is_desktop'),
                                       f.col('device_revenue_per_transaction'),
                                       f.col('browser_revenue_per_transaction')
-                                  )
+                                  ).alias('features')
                               ).join(
                                   client_ids_session_counts, 'client_id', 'inner'
                               ).repartition(32)
@@ -339,8 +344,6 @@ class CalculationsPreprocessor:
         ga_epna_data_shopping_stages = (ga_epnah_features_filtered_df.
                                         groupBy('client_id').
                                         agg(
-                                            f.first('client_id').alias(
-                                                'client_id'),
                                             f.collect_list('shopping_stage').alias(
                                                 'shopping_stages')
                                         ).join(
