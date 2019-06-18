@@ -341,9 +341,9 @@ def main():
                          )
                          .join(session_counts, 'client_id', 'inner')
                          .join(hit_counts, 'session_count', 'inner')
-                         .withColumn('features', zero_padder('features', 'max_hit_count')).
-                         drop('max_hit_count').
-                         repartition(32)
+                         .withColumn('features', zero_padder('features', 'max_hit_count'))
+                         .drop('max_hit_count')
+                         .repartition(32)
                          )
 
     # Get session arrays
