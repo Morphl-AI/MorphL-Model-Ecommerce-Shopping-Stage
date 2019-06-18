@@ -1,5 +1,6 @@
 from os import getenv
 from pyspark.sql import functions as f, SparkSession
+from pyspark.sql.types import ArrayType, DoubleType
 
 
 class CalculationsPreprocessor:
@@ -257,13 +258,39 @@ class CalculationsPreprocessor:
         # Remove shopping stage outliers
         hits_df = self.remove_outliers(hits_df).repartition(32)
 
-        client_ids_session_counts = (ga_epnas_features_filtered_df
-                                     .groupBy('client_id')
-                                     .agg(
-                                         f.countDistinct('session_id').alias(
-                                             'session_count')
-                                     )
-                                     )
+        hit_counts = (hits_df
+                      .groupBy('session_id')
+                      .agg(
+                          f.first('client_id').alias('client_id'),
+                          f.count('hit_id').alias('hit_count')
+                      )
+                      .groupBy('client_id')
+                      .agg(
+                          f.count('session_id').alias('session_count'),
+                          f.max('hit_count').alias('hit_count')
+                      )
+                      .groupBy('session_count')
+                      .agg(
+                          f.max('hit_count').alias('max_hit_count')
+                      )
+                      )
+
+        session_counts = (ga_epnas_features_filtered_df
+                          .groupBy('client_id')
+                          .agg(
+                              f.count('session_id').alias('session_count')
+                          ))
+
+        def pad_with_zero(features_arrays, hit_count):
+
+            for session_count in range(len(features_arrays)):
+                features_arrays[session_count] = features_arrays[session_count] + \
+                    [[0.0, 0.0, 0.0, 0.0]] * hit_count
+
+            return features_arrays
+
+        zero_padder = f.udf(pad_with_zero, ArrayType(
+            ArrayType(ArrayType(DoubleType()))))
 
         ga_epna_data_hits = (hits_df.
                              select(
@@ -284,25 +311,14 @@ class CalculationsPreprocessor:
                              .agg(
                                  f.collect_list(
                                      'hits_features').alias('features')
-                             ).join(
-                                 client_ids_session_counts, 'client_id', 'inner')
-                             .repartition(32)
+                             )
+                             .join(session_counts, 'client_id', 'inner')
+                             .join(hit_counts, 'session_count', 'inner')
+                             .withColumn('features', zero_padder('features', 'max_hit_count')).
+                             drop('hit_count').
+                             repartition(32)
                              )
 
-        ga_epna_data_num_hits = (hits_df.
-                                 groupBy('session_id').
-                                 agg(
-                                     f.first('client_id').alias('client_id'),
-                                     f.count('hit_id').alias('hits_count')
-                                 ).
-                                 groupBy('client_id').
-                                 agg(
-                                     f.collect_list('hits_count').alias(
-                                         'sessions_hits_count')
-                                 ).join(
-                                     client_ids_session_counts, 'client_id', 'inner'
-                                 ).repartition(32)
-                                 )
 
         ga_epna_data_sessions = (ga_epnas_features_filtered_df.
                                  withColumn(
@@ -337,7 +353,7 @@ class CalculationsPreprocessor:
                                      f.collect_list('session_features').alias(
                                          'features')
                                  ).join(
-                                     client_ids_session_counts, 'client_id', 'inner'
+                                     session_counts, 'client_id', 'inner'
                                  )
                                  .repartition(32)
                                  )
@@ -364,7 +380,7 @@ class CalculationsPreprocessor:
                                       f.col('browser_revenue_per_transaction')
                                   ).alias('features')
                               ).join(
-                                  client_ids_session_counts, 'client_id', 'inner'
+                                  session_counts, 'client_id', 'inner'
                               ).repartition(32)
                               )
 
@@ -374,9 +390,25 @@ class CalculationsPreprocessor:
                                             f.collect_list('shopping_stage').alias(
                                                 'shopping_stages')
                                         ).join(
-                                            client_ids_session_counts, 'client_id', 'inner'
+                                            session_counts, 'client_id', 'inner'
                                         ).repartition(32)
                                         )
+
+        ga_epna_data_num_hits = (hits_df.
+                                 groupBy('session_id').
+                                 agg(
+                                     f.first('client_id').alias('client_id'),
+                                     f.count('hit_id').alias('hits_count')
+                                 ).
+                                 groupBy('client_id').
+                                 agg(
+                                     f.collect_list('hits_count').alias(
+                                         'sessions_hits_count')
+                                 ).join(
+                                     session_counts, 'client_id', 'inner'
+                                 ).repartition(32)
+                                 )
+
 
         self.save_data(ga_epna_data_hits, ga_epna_data_num_hits, ga_epna_data_sessions,
                        ga_epna_data_users, ga_epna_data_shopping_stages)
