@@ -22,6 +22,8 @@ HDFS_DIR_HIT_FILTERED = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICT
 HDFS_DIR_DATA_HITS = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_data_hits'
 
 # Initialize the spark sessions and return it.
+
+
 def get_spark_session():
     spark_session = (
         SparkSession.builder
@@ -169,6 +171,8 @@ def replace_single_product_views(df):
 
     return df.withColumn('shopping_stage', replace_single_product_view_udf('shopping_stage'))
 
+# Save the 5 dfs to Cassandra
+
 
 def save_data(hits_data, hits_num_data, session_data, user_data, shopping_stages_data):
 
@@ -233,13 +237,14 @@ def save_data(hits_data, hits_num_data, session_data, user_data, shopping_stages
         .save())
 
 
-def pad_with_zero(features_arrays, hit_count):
+# Udf function used to pad the session arrays with hits of zero value
+def pad_with_zero(features, max_hit_count):
 
-    for session_count in range(len(features_arrays)):
-        features_arrays[session_count] = features_arrays[session_count] + \
-            [[0.0, 0.0, 0.0, 0.0]] * hit_count
+    for session_count in range(len(features)):
+        features[session_count] = features[session_count] + \
+            [[0.0, 0.0, 0.0, 0.0]] * max_hit_count
 
-    return features_arrays
+    return features
 
 
 def main():
@@ -274,6 +279,7 @@ def main():
     # Remove shopping stage outliers
     hits_df = remove_outliers(hits_df).repartition(32)
 
+    # Get the maximum hit count for each session count
     hit_counts = (hits_df
                   .groupBy('session_id')
                   .agg(
@@ -291,17 +297,30 @@ def main():
                   )
                   )
 
+    # Get the session_counts for all client_ids
     session_counts = (ga_epnas_features_filtered_df
                       .groupBy('client_id')
                       .agg(
                           f.count('session_id').alias('session_count')
                       ))
 
+    # Initialize udf
     zero_padder = f.udf(pad_with_zero, ArrayType(
         ArrayType(ArrayType(DoubleType()))))
 
-    ga_epna_data_hits = (hits_df.
-                         select(
+    # Get the hit zero padded arrays
+    # user[
+    #     session[
+    #         hit[1.0, 2.0, 3.0, 4.0],
+    #         hit[5.0, 6.0, 7.0, 8.0]
+    #     ],
+    #     session[
+    #         hit[9.0, 10.0, 11.0, 12.0],
+    #         hit[0.0, 0.0, 0.0, 0.0]
+    #     ]
+    # ]
+    ga_epna_data_hits = (hits_df
+                         .select(
                              'client_id',
                              'session_id',
                              f.array(
@@ -327,18 +346,23 @@ def main():
                          repartition(32)
                          )
 
-    ga_epna_data_sessions = (ga_epnas_features_filtered_df.
-                             withColumn(
+    # Get session arrays
+    # user[
+    #     session[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
+    #     session[13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0]
+    # ]
+    ga_epna_data_sessions = (ga_epnas_features_filtered_df
+                             .withColumn(
                                  'with_site_search',
                                  f.when(f.col('search_used') == 'Visits With Site Search', 1.0).otherwise(
                                      0.0)
-                             ).
-                             withColumn(
+                             )
+                             .withColumn(
                                  'without_site_search',
                                  f.when(f.col('search_used') == 'Visits Without Site Search', 1.0).otherwise(
                                      0.0)
-                             ).
-                             select(
+                             )
+                             .select(
                                  'client_id',
                                  'session_id',
                                  f.array(
@@ -365,6 +389,8 @@ def main():
                              .repartition(32)
                              )
 
+    # Get user arrays
+    # user[1.0, 2.0, 3.0, 4.0, 5.0]
     ga_epna_data_users = (users_df.
                           withColumn(
                               'is_mobile', f.when(
@@ -390,7 +416,11 @@ def main():
                               session_counts, 'client_id', 'inner'
                           ).repartition(32)
                           )
-
+    # Get the shopping stages arrays
+    # user[
+    #       session[stages],
+    #       session[stages]
+    # ]
     ga_epna_data_shopping_stages = (hits_df.
                                     groupBy('client_id').
                                     agg(
@@ -401,6 +431,12 @@ def main():
                                     ).repartition(32)
                                     )
 
+    # Get the number of hits arrays
+    # user[
+    #     numHitsSession1,
+    #     numHitsSession2,
+    #     numHitsSession3
+    # ]
     ga_epna_data_num_hits = (hits_df.
                              groupBy('session_id').
                              agg(
