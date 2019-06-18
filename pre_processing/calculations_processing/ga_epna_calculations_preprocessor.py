@@ -294,7 +294,7 @@ def main():
                   .groupBy('session_count')
                   .agg(
                       f.max('hit_count').alias('max_hit_count')
-                  )
+                  ).repartition(32)
                   )
 
     # Get the session_counts for all client_ids
@@ -303,6 +303,8 @@ def main():
                       .agg(
                           f.count('session_id').alias('session_count')
                       ))
+
+    session_counts.cache()
 
     # Initialize udf
     zero_padder = f.udf(pad_with_zero, ArrayType(
