@@ -128,8 +128,14 @@ CREATE TABLE morphl.ga_epnah_features_filtered(
   product_list_clicks double,
   product_list_views double,
   product_detail_views double,
-  shopping_stage frozen<set<text>>,
   PRIMARY KEY ((client_id),session_id, hit_id)
+);
+
+CREATE TABLE morphl.ga_epna_shopping_stages_filtered(
+  client_id text, 
+  session_id text,
+  shopping_stage text,
+  PRIMARY KEY((client_id), session_id)
 );
 
 CREATE TABLE morphl.ga_epna_data_hits(
