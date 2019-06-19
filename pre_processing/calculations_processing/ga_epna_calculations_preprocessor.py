@@ -269,7 +269,8 @@ def main():
     shopping_stage_formatter = f.udf(format_shopping_stages, StringType())
 
     # Format shopping stages as strings
-    hits_df = hits_df.withColumn('shopping_stage', shopping_stage_formatter('shopping_stage'))
+    hits_df = hits_df.withColumn(
+        'shopping_stage', shopping_stage_formatter('shopping_stage'))
 
     # Aggregate all transactions to a single output
     hits_df = aggregate_transactions(hits_df)
@@ -393,9 +394,13 @@ def main():
                              .repartition(32)
                              )
 
+    user_types = hits_df.groupBy('client_id').agg(
+        f.last('user_type').alias('user_type'))
+
     # Get user arrays
     # user[1.0, 2.0, 3.0, 4.0, 5.0]
     ga_epna_data_users = (users_df.
+                          join(user_types, 'client_id', 'inner').
                           withColumn(
                               'is_mobile', f.when(
                                   f.col('device_category') == 'desktop', 1.0).otherwise(0.0)
@@ -407,12 +412,23 @@ def main():
                           withColumn(
                               'is_desktop', f.when(
                                   f.col('device_category') == 'mobile', 1.0).otherwise(0.0)
-                          ).select(
+                          ).
+                          withColumn(
+                              'new_visitor', f.when(
+                                  f.col('user_type') == 'New Visitor', 1.0).otherwise(0.0)
+                          ).
+                          withColumn(
+                              'returning_visitor', f.when(
+                                  f.col('user_type') == 'Returning Visitor', 1.0).otherwise(0.0)
+                          ).
+                          select(
                               'client_id',
                               f.array(
                                   f.col('is_mobile'),
                                   f.col('is_tablet'),
                                   f.col('is_desktop'),
+                                  f.col('new_visitor'),
+                                  f.col('returning_visitor'),
                                   f.col('device_revenue_per_transaction'),
                                   f.col('browser_revenue_per_transaction')
                               ).alias('features')
