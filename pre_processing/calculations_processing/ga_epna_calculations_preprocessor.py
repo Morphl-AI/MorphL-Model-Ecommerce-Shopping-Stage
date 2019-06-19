@@ -1,6 +1,6 @@
 from os import getenv
 from pyspark.sql import functions as f, SparkSession
-from pyspark.sql.types import ArrayType, DoubleType, StringType
+from pyspark.sql.types import ArrayType, DoubleType
 
 
 HDFS_PORT = 9000
@@ -18,8 +18,7 @@ MORPHL_CASSANDRA_KEYSPACE = getenv('MORPHL_CASSANDRA_KEYSPACE')
 HDFS_DIR_USER_FILTERED = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnau_filtered'
 HDFS_DIR_SESSION_FILTERED = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnas_filtered'
 HDFS_DIR_HIT_FILTERED = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnah_filtered'
-
-HDFS_DIR_DATA_HITS = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_data_hits'
+HDFS_DIR_STAGES_FILTERED = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epna_shopping_stages_filtered'
 
 # Initialize the spark sessions and return it.
 
@@ -107,71 +106,15 @@ def calculate_browser_device_features(users_df, sessions_df):
                 'inner')
             ).repartition(32)
 
-# UDF to format shopping stages and cast them to string
 
+# Udf function used to pad the session arrays with hits of zero value
+def pad_with_zero(features, max_hit_count):
 
-def format_shopping_stages(stages):
-    stages.sort()
+    for session_count in range(len(features)):
+        features[session_count] = features[session_count] + \
+            [[0.0, 0.0, 0.0, 0.0]] * max_hit_count
 
-    return '|'.join(stages)
-
-# Replace all shopping stages that contain the TRANSACTION stage with just TRANSACTION
-
-
-def aggregate_transactions(df):
-    replace_stages_udf = f.udf(lambda stages: 'TRANSACTION' if stages.find(
-        'TRANSACTION') != -1 else stages, 'string')
-
-    return df.withColumn('shopping_stage', replace_stages_udf('shopping_stage'))
-
-# Remove outlying shopping stages
-
-
-def remove_outliers(df):
-
-    # # Get the counts for all unique shopping stages
-    # unique_stages_counts = (df
-    #                         .groupBy('shopping_stage')
-    #                         .agg(
-    #                             f.countDistinct('client_id')
-    #                             .alias('stages_count')
-    #                         ))
-
-    # unique_stages_counts.cache()
-
-    # # Calculate the threshold for outliers
-    # outlier_threshold = max(unique_stages_counts.agg(
-    #     f.sum('stages_count')).collect()[0][0] / 1000, 20)
-
-    # # Get a list of all shopping stages bellow the threshold
-    # list_of_outlier_stages = (unique_stages_counts
-    #                           .select('shopping_stage')
-    #                           .where(unique_stages_counts.stages_count < outlier_threshold)
-    #                           .rdd
-    #                           .flatMap(lambda stage: stage)
-    #                           .collect()
-    #                           )
-
-    stages_to_keep = ['ALL_VISITS', 'ALL_VISITS|PRODUCT_VIEW', 'ADD_TO_CART|ALL_VISITS|PRODUCT_VIEW',
-                      'ADD_TO_CART|ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 'ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 'TRANSACTION']
-
-    # Replace all outlying shopping stages with ALL_VISITS
-    remove_outliers_udf = f.udf(
-        lambda stages: stages if stages in stages_to_keep else 'ALL_VISITS', 'string')
-
-    return df.withColumn('shopping_stage', remove_outliers_udf('shopping_stage'))
-
-# Replace single PRODUCT_VIEW shopping stages with ALL_VISITS|PRODUCT_VIEW
-
-
-def replace_single_product_views(df):
-
-    replace_single_product_view_udf = f.udf(
-        lambda stages: stages if stages != 'PRODUCT_VIEW' else 'ALL_VISITS|PRODUCT_VIEW')
-
-    return df.withColumn('shopping_stage', replace_single_product_view_udf('shopping_stage'))
-
-# Save the 5 dfs to Cassandra
+    return features
 
 
 def save_data(hits_data, hits_num_data, session_data, user_data, shopping_stages_data):
@@ -237,16 +180,6 @@ def save_data(hits_data, hits_num_data, session_data, user_data, shopping_stages
         .save())
 
 
-# Udf function used to pad the session arrays with hits of zero value
-def pad_with_zero(features, max_hit_count):
-
-    for session_count in range(len(features)):
-        features[session_count] = features[session_count] + \
-            [[0.0, 0.0, 0.0, 0.0]] * max_hit_count
-
-    return features
-
-
 def main():
 
     # Initialize spark session
@@ -262,28 +195,16 @@ def main():
     ga_epnah_features_filtered_df = spark_session.read.parquet(
         HDFS_DIR_HIT_FILTERED)
 
+    ga_epna_shopping_stages_filtered_df = spark_session.read.parquet(
+        HDFS_DIR_STAGES_FILTERED
+    )
+
     # Calculate revenue by device and revenue by browser columns
     users_df = calculate_browser_device_features(
         ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
 
-    shopping_stage_formatter = f.udf(format_shopping_stages, StringType())
-
-    # Format shopping stages as strings
-    hits_df = hits_df.withColumn(
-        'shopping_stage', shopping_stage_formatter('shopping_stage'))
-
-    # Aggregate all transactions to a single output
-    hits_df = aggregate_transactions(hits_df)
-
-    # Replace single product views with all visits
-    hits_df = replace_single_product_views(
-        hits_df)
-
-    # Remove shopping stage outliers
-    hits_df = remove_outliers(hits_df).repartition(32)
-
     # Get the maximum hit count for each session count
-    hit_counts = (hits_df
+    hit_counts = (ga_epnah_features_filtered_df
                   .groupBy('session_id')
                   .agg(
                       f.first('client_id').alias('client_id'),
@@ -324,7 +245,7 @@ def main():
     #         hit[0.0, 0.0, 0.0, 0.0]
     #     ]
     # ]
-    ga_epna_data_hits = (hits_df
+    ga_epna_data_hits = (ga_epnah_features_filtered_df
                          .select(
                              'client_id',
                              'session_id',
@@ -394,7 +315,7 @@ def main():
                              .repartition(32)
                              )
 
-    user_types = hits_df.groupBy('client_id').agg(
+    user_types = ga_epnah_features_filtered_df.groupBy('client_id').agg(
         f.last('user_type').alias('user_type'))
 
     # Get user arrays
@@ -441,14 +362,7 @@ def main():
     #       session[stages],
     #       session[stages]
     # ]
-    ga_epna_data_shopping_stages = (hits_df.
-                                    groupBy('session_id').
-                                    agg(
-                                        f.first('client_id').alias(
-                                            'client_id'),
-                                        f.first('shopping_stage').alias(
-                                            'shopping_stage')
-                                    ).
+    ga_epna_data_shopping_stages = (ga_epna_shopping_stages_filtered_df.
                                     withColumn(
                                         'shopping_stage_1', f.when(
                                             f.col('shopping_stage') == 'ALL_VISITS', 1.0).otherwise(0.0)
@@ -495,7 +409,7 @@ def main():
     #     numHitsSession2,
     #     numHitsSession3
     # ]
-    ga_epna_data_num_hits = (hits_df.
+    ga_epna_data_num_hits = (ga_epnah_features_filtered_df.
                              groupBy('session_id').
                              agg(
                                  f.first('client_id').alias('client_id'),
