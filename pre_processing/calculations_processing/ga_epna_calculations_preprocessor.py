@@ -424,13 +424,51 @@ def main():
     #       session[stages]
     # ]
     ga_epna_data_shopping_stages = (hits_df.
-                                    groupBy('client_id').
+                                    groupBy('session_id').
                                     agg(
-                                        f.collect_list('shopping_stage').alias(
-                                            'shopping_stages')
-                                    ).join(
-                                        session_counts, 'client_id', 'inner'
-                                    ).repartition(32)
+                                        f.first('client_id').alias(
+                                            'client_id'),
+                                        f.first('shopping_stage').alias(
+                                            'shopping_stage')
+                                    ).
+                                    withColumn(
+                                        'shopping_stage_1', f.when(
+                                            f.col('shopping_stage') == 'ALL_VISITS', 1.0).otherwise(0.0)
+                                    ).
+                                    withColumn(
+                                        'shopping_stage_2', f.when(
+                                            f.col('shopping_stage') == 'ALL_VISITS|PRODUCT_VIEW', 1.0).otherwise(0.0)
+                                    ).
+                                    withColumn(
+                                        'shopping_stage_3', f.when(
+                                            f.col('shopping_stage') == 'ALL_VISITS|PRODUCT_VIEW|ADD_TO_CART', 1.0).otherwise(0.0)
+                                    ).
+                                    withColumn(
+                                        'shopping_stage_4', f.when(
+                                            f.col('shopping_stage') == 'ALL_VISITS|PRODUCT_VIEW|ADD_TO_CART|CHECKOUT', 1.0).otherwise(0.0)
+                                    ).
+                                    withColumn(
+                                        'shopping_stage_5', f.when(
+                                            f.col('shopping_stage') == 'ALL_VISITS|PRODUCT_VIEW|CHECKOUT', 1.0).otherwise(0.0)
+                                    ).
+                                    withColumn('shopping_stage_6', f.when(
+                                        f.col('shopping_stage') == 'TRANSACTION', 1.0).otherwise(0.0)
+                                    ).select(
+                                        'client_id',
+                                        'session_id',
+                                        f.array(
+                                            f.col('shopping_stage_1'),
+                                            f.col('shopping_stage_2'),
+                                            f.col('shopping_stage_3'),
+                                            f.col('shopping_stage_4'),
+                                            f.col('shopping_stage_5'),
+                                            f.col('shopping_stage_6')
+                                        ).alias('shopping_stage')
+                                    ).
+                                    groupBy('client_id').
+                                    agg(f.collect_list('shopping_stage').alias('shopping_stages')).
+                                    join(session_counts, 'client_id', 'inner').
+                                    repartition(32)
                                     )
 
     # Get the number of hits arrays
