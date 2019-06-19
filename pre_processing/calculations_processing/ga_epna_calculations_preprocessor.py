@@ -1,6 +1,6 @@
 from os import getenv
 from pyspark.sql import functions as f, SparkSession
-from pyspark.sql.types import ArrayType, DoubleType
+from pyspark.sql.types import ArrayType, DoubleType, StringType
 
 
 HDFS_PORT = 9000
@@ -107,13 +107,13 @@ def calculate_browser_device_features(users_df, sessions_df):
                 'inner')
             ).repartition(32)
 
-# Format shopping stages and cast them to string
+# UDF to format shopping stages and cast them to string
 
 
-def format_shopping_stages(df):
-    format_stages_udf = f.udf(lambda stages: '|'.join(stages), 'string')
+def format_shopping_stages(stages):
+    stages.sort()
 
-    return df.withColumn('shopping_stage', format_stages_udf('shopping_stage'))
+    return '|'.join(stages)
 
 # Replace all shopping stages that contain the TRANSACTION stage with just TRANSACTION
 
@@ -152,8 +152,8 @@ def remove_outliers(df):
     #                           .collect()
     #                           )
 
-    stages_to_keep = ['ALL_VISITS', 'ALL_VISITS|PRODUCT_VIEW', 'ALL_VISITS|PRODUCT_VIEW|ADD_TO_CART',
-                      'ALL_VISITS|PRODUCT_VIEW|ADD_TO_CART|CHECKOUT', 'ALL_VISITS|PRODUCT_VIEW|CHECKOUT', 'TRANSACTION']
+    stages_to_keep = ['ALL_VISITS', 'ALL_VISITS|PRODUCT_VIEW', 'ADD_TO_CART|ALL_VISITS|PRODUCT_VIEW',
+                      'ADD_TO_CART|ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 'ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 'TRANSACTION']
 
     # Replace all outlying shopping stages with ALL_VISITS
     remove_outliers_udf = f.udf(
@@ -266,8 +266,10 @@ def main():
     users_df = calculate_browser_device_features(
         ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
 
+    shopping_stage_formatter = f.udf(format_shopping_stages, StringType())
+
     # Format shopping stages as strings
-    hits_df = format_shopping_stages(ga_epnah_features_filtered_df)
+    hits_df = hits_df.withColumn('shopping_stage', shopping_stage_formatter('shopping_stage'))
 
     # Aggregate all transactions to a single output
     hits_df = aggregate_transactions(hits_df)
@@ -441,15 +443,15 @@ def main():
                                     ).
                                     withColumn(
                                         'shopping_stage_3', f.when(
-                                            f.col('shopping_stage') == 'ALL_VISITS|PRODUCT_VIEW|ADD_TO_CART', 1.0).otherwise(0.0)
+                                            f.col('shopping_stage') == 'ADD_TO_CART|ALL_VISITS|PRODUCT_VIEW', 1.0).otherwise(0.0)
                                     ).
                                     withColumn(
                                         'shopping_stage_4', f.when(
-                                            f.col('shopping_stage') == 'ALL_VISITS|PRODUCT_VIEW|ADD_TO_CART|CHECKOUT', 1.0).otherwise(0.0)
+                                            f.col('shopping_stage') == 'ADD_TO_CART|ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 1.0).otherwise(0.0)
                                     ).
                                     withColumn(
                                         'shopping_stage_5', f.when(
-                                            f.col('shopping_stage') == 'ALL_VISITS|PRODUCT_VIEW|CHECKOUT', 1.0).otherwise(0.0)
+                                            f.col('shopping_stage') == 'ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 1.0).otherwise(0.0)
                                     ).
                                     withColumn('shopping_stage_6', f.when(
                                         f.col('shopping_stage') == 'TRANSACTION', 1.0).otherwise(0.0)
