@@ -246,6 +246,7 @@ def main():
     #     ]
     # ]
     ga_epna_data_hits = (ga_epnah_features_filtered_df
+                         .orderBy('date_hour_minute')
                          .select(
                              'client_id',
                              'session_id',
@@ -260,7 +261,9 @@ def main():
                              f.first('client_id').alias('client_id'),
                              f.collect_list('hits_features').alias(
                                  'hits_features')
-                         ).groupBy('client_id')
+                         )
+                         .orderBy('session_id')
+                         .groupBy('client_id')
                          .agg(
                              f.collect_list(
                                  'hits_features').alias('features')
@@ -288,6 +291,7 @@ def main():
                                  f.when(f.col('search_used') == 'Visits Without Site Search', 1.0).otherwise(
                                      0.0)
                              )
+                             .orderBy('session_id')
                              .select(
                                  'client_id',
                                  'session_id',
@@ -305,7 +309,8 @@ def main():
                                      f.col('search_depth'),
                                      f.col('search_refinements')
                                  ).alias('session_features')
-                             ).groupBy('client_id')
+                             )
+                             .groupBy('client_id')
                              .agg(
                                  f.collect_list('session_features').alias(
                                      'features')
@@ -385,7 +390,9 @@ def main():
                                     ).
                                     withColumn('shopping_stage_6', f.when(
                                         f.col('shopping_stage') == 'TRANSACTION', 1.0).otherwise(0.0)
-                                    ).select(
+                                    )
+                                    .orderBy('session_id')
+                                    .select(
                                         'client_id',
                                         'session_id',
                                         f.array(
@@ -410,11 +417,13 @@ def main():
     #     numHitsSession3
     # ]
     ga_epna_data_num_hits = (ga_epnah_features_filtered_df.
+                             orderBy('date_hour_minute').
                              groupBy('session_id').
                              agg(
                                  f.first('client_id').alias('client_id'),
                                  f.count('hit_id').alias('hits_count')
                              ).
+                             orderBy('session_id').
                              groupBy('client_id').
                              agg(
                                  f.collect_list('hits_count').alias(
