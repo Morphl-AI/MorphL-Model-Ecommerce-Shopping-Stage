@@ -97,7 +97,7 @@ class CassandraPersistence:
 
         # Session related data
         if report_type in self.type_3_set:
-            session_id = data_dict['dimensions'][1]
+            session_id = data_dict['dimensions'][1] + '.' + str(client_id)
             bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
                          session_id, json_meta, json_data]
             return {'cassandra_future': self.session.execute_async(self.prep_stmts[report_type],
@@ -108,7 +108,7 @@ class CassandraPersistence:
 
         # Session shopping stage data
         if report_type in self.type_4_set:
-            session_id = data_dict['dimensions'][1]
+            session_id = data_dict['dimensions'][1] + '.' + str(client_id)
             shopping_stage = data_dict['dimensions'][2]
             bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
                          session_id, shopping_stage]
@@ -122,7 +122,7 @@ class CassandraPersistence:
 
         # Hit related data
         if report_type in self.type_5_set:
-            session_id = data_dict['dimensions'][1]
+            session_id = data_dict['dimensions'][1] + '.' + str(client_id)
             hit_id = data_dict['dimensions'][2] + \
                 '.' + str(data_dict['dimensions'][4])
             bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
