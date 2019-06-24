@@ -2,7 +2,7 @@ from os import getenv
 import numpy as np
 
 from pyspark.sql import SparkSession
-
+from pyspark.sql import Window, functions as f
 
 import numpy as np
 import torch as tr
@@ -254,7 +254,6 @@ class ModelLSTM_V1(nn.Module):
         return hiddens
 
 
-
 # Return a spark dataframe from a specified Cassandra table.
 def fetch_from_cassandra(c_table_name, spark_session):
 
@@ -286,36 +285,49 @@ def main():
     log4j.LogManager.getRootLogger().setLevel(log4j.Level.ERROR)
 
     sessions = fetch_from_cassandra(
-        'ga_epna_data_sessions', spark_session)
+        'exga_epna_data_sessions', spark_session)
     hits = fetch_from_cassandra(
-        'ga_epna_data_hits', spark_session)
+        'exga_epna_data_hits', spark_session)
     users = fetch_from_cassandra(
-        'ga_epna_data_users', spark_session)
+        'exga_epna_data_users', spark_session)
     num_items = fetch_from_cassandra(
-        'ga_epna_data_num_hits', spark_session)
+        'exga_epna_data_num_hits', spark_session)
     shopping_stage = fetch_from_cassandra(
-        'ga_epna_data_shopping_stages', spark_session)
+        'exga_epna_data_shopping_stages', spark_session)
 
     model = ModelLSTM_V1(inputShape=(7, 12, 4), outputShape=6, hyperParameters={"randomizeSessionSize": True,
-                                                                                "appendPreviousOutput": True, "baseNeurons": 30, "outputType": "regression", "attributionModeling": "linear"})
+                                                                                "appendPreviousOutput": True,
+                                                                                "baseNeurons": 30,
+                                                                                "outputType": "regression",
+                                                                                "attributionModeling": "linear"})
 
     model.loadWeights("model_predict.pkl")
 
-    for session_count in range(1, 21):
+    for session_count in range(1, 5):
+
         sessions_array = np.array(sessions.filter("session_count == {}".format(
-            session_count)).select('features').rdd.flatMap(lambda x: x).collect())
+            session_count)).orderBy('client_id').select('features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
 
         hits_array = np.array(hits.filter("session_count == {}".format(
-            session_count)).select('features').rdd.flatMap(lambda x: x).collect())
+            session_count)).orderBy('client_id').select('features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
 
         users_array = np.array(users.filter("session_count == {}".format(
-            session_count)).select('features').rdd.flatMap(lambda x: x).collect())
+            session_count)).orderBy('client_id').select('features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
 
         num_items_array = np.array(num_items.filter("session_count == {}".format(
-            session_count)).select('sessions_hits_count').rdd.flatMap(lambda x: x).collect())
+            session_count)).orderBy('client_id').select('sessions_hits_count').rdd.flatMap(lambda x: x).collect())
 
         shopping_stage_array = np.array(shopping_stage.filter("session_count == {}".format(
-            session_count)).select('shopping_stages').rdd.flatMap(lambda x: x).collect())
+            session_count)).orderBy('client_id').select('shopping_stages').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
+
+        order_df = (sessions.
+                    select('client_id', 'session_count').
+                    filter('session_count =={}'.format(session_count)).
+                    withColumn(
+                        'index',
+                        f.row_number().over(Window.orderBy('client_id'))
+                    ).drop('session_count')
+                    )
 
         result = model.npForward({"dataSessions": sessions_array,
                                   "dataHits": hits_array,
@@ -323,8 +335,29 @@ def main():
                                   "dataNumItems": num_items_array,
                                   "dataShoppingStage": shopping_stage_array})
 
-        # result will be saved to cassandra
+        result = np.delete(
+            result, np.s_[:session_count - 1], axis=1).reshape(result.shape[0], 6)
 
+        result_df = (
+            spark_session.
+            sparkContext.
+            parallelize(result).
+            map(lambda x: [float(item) for item in x]).
+            toDF([
+                'all_visits',
+                'product_view',
+                'add_to_cart',
+                'checkout_with_add_to_cart',
+                'checkout_without_add_to_cart',
+                'transaction'
+            ]).
+            withColumn(
+                'index',
+                f.row_number().over(Window.orderBy(f.monotonically_increasing_id()))
+            ).
+            join(order_df, 'index', 'inner').
+            repartition(32)
 
-if __name__ == '__main__':
-    main()
+        )
+
+        print(result_df.first())
