@@ -36,14 +36,16 @@ class CassandraPersistence:
         self.prep_stmts = {}
 
         type_1_list = ['users']
-        type_2_list = ['sessions']
-        type_3_list = ['hits']
-        type_4_list = ['transactions']
+        type_2_list = ['users_mobile_brand']
+        type_3_list = ['sessions']
+        type_4_list = ['sessions_shopping_stages']
+        type_5_list = ['hits']
 
         template_for_type_1 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,json_meta,json_data) VALUES (?,?,?,?)'
-        template_for_type_2 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,json_meta,json_data) VALUES (?,?,?,?,?)'
-        template_for_type_3 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,hit_id,json_meta,json_data) VALUES (?,?,?,?,?,?)'
-        template_for_type_4 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,transaction_id,json_meta,json_data) VALUES (?,?,?,?,?,?)'
+        template_for_type_2 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,mobile_device_branding) VALUES (?,?,?)'
+        template_for_type_3 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,json_meta,json_data) VALUES (?,?,?,?,?)'
+        template_for_type_4 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,shopping_stage) VALUES (?,?,?,?)'
+        template_for_type_5 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,hit_id,json_meta,json_data) VALUES (?,?,?,?,?,?)'
 
         for report_type in type_1_list:
             self.prep_stmts[report_type] = self.session.prepare(
@@ -57,11 +59,15 @@ class CassandraPersistence:
         for report_type in type_4_list:
             self.prep_stmts[report_type] = self.session.prepare(
                 template_for_type_4.format(report_type))
+        for report_type in type_5_list:
+            self.prep_stmts[report_type] = self.session.prepare(
+                template_for_type_5.format(report_type))
 
         self.type_1_set = set(type_1_list)
         self.type_2_set = set(type_2_list)
         self.type_3_set = set(type_3_list)
         self.type_4_set = set(type_4_list)
+        self.type_5_set = set(type_5_list)
 
     def persist_dict_record(self, report_type, meta_dict, data_dict):
         raw_cl_id = data_dict['dimensions'][0]
@@ -69,6 +75,7 @@ class CassandraPersistence:
         json_meta = dumps(meta_dict)
         json_data = dumps(data_dict)
 
+        # User related data
         if report_type in self.type_1_set:
             bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
                          json_meta, json_data]
@@ -77,8 +84,20 @@ class CassandraPersistence:
                                                                    timeout=self.CASS_REQ_TIMEOUT),
                     'client_id': client_id}
 
+        # Mobile device related data for mobile users
         if report_type in self.type_2_set:
-            session_id = data_dict['dimensions'][1]
+            mobile_device_branding = data_dict['dimensions'][1]
+            bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
+                         mobile_device_branding]
+
+            return {'cassandra_future': self.session.execute_async(self.prep_stmts[report_type],
+                                                                   bind_list,
+                                                                   timeout=self.CASS_REQ_TIMEOUT),
+                    'client_id': client_id}
+
+        # Session related data
+        if report_type in self.type_3_set:
+            session_id = data_dict['dimensions'][1] + '.' + str(client_id)
             bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
                          session_id, json_meta, json_data]
             return {'cassandra_future': self.session.execute_async(self.prep_stmts[report_type],
@@ -87,8 +106,23 @@ class CassandraPersistence:
                     'client_id': client_id,
                     'session_id': session_id}
 
-        if report_type in self.type_3_set:
-            session_id = data_dict['dimensions'][1]
+        # Session shopping stage data
+        if report_type in self.type_4_set:
+            session_id = data_dict['dimensions'][1] + '.' + str(client_id)
+            shopping_stage = data_dict['dimensions'][2]
+            bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
+                         session_id, shopping_stage]
+
+            return {'cassandra_future': self.session.execute_async(self.prep_stmts[report_type],
+                                                                   bind_list,
+                                                                   timeout=self.CASS_REQ_TIMEOUT),
+                    'client_id': client_id,
+                    'session_id': session_id,
+                    'shopping_stage': shopping_stage}
+
+        # Hit related data
+        if report_type in self.type_5_set:
+            session_id = data_dict['dimensions'][1] + '.' + str(client_id)
             hit_id = data_dict['dimensions'][2] + \
                 '.' + str(data_dict['dimensions'][4])
             bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
@@ -100,18 +134,6 @@ class CassandraPersistence:
                     'client_id': client_id,
                     'session_id': session_id,
                     'hit_id': hit_id}
-
-        if report_type in self.type_4_set:
-            session_id = data_dict['dimensions'][1]
-            transaction_id = data_dict['dimensions'][2]
-            bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
-                         session_id, transaction_id, json_meta, json_data]
-
-            return {'cassandra_future': self.session.execute_async(self.prep_stmts[report_type], bind_list, timeout=self.CASS_REQ_TIMEOUT),
-
-                    'client_id': client_id,
-                    'session_id': session_id,
-                    'transaction_id': transaction_id}
 
 
 class GoogleAnalytics:
@@ -144,7 +166,7 @@ class GoogleAnalytics:
         return [{'expression': 'ga:' + metric} for metric in metrics]
 
     # Make request to the GA reporting API and return paginated results.
-    def run_report_and_store(self, report_type, dimensions, metrics, dimensions_filters=None, metrics_filters=None):
+    def run_report_and_store(self, report_type, dimensions, metrics, user_segment, dimensions_filters=None, metrics_filters=None):
         """Queries the Analytics Reporting API V4 and stores the results in a datastore.
 
         Args:
@@ -163,8 +185,24 @@ class GoogleAnalytics:
             'pageSize': self.API_PAGE_SIZE,
         }
 
+        # Segment filter so we get users in batches based on the starting digit
+        # of their client id, ex: GA1, GA2, GA3 etc.
+        query_params['dimensionFilterClauses'] = [
+            {
+                "filters": [
+                    {
+                        "dimensionName": "ga:dimension8",
+                        "operator": "BEGINS_WITH",
+                        "expressions": [user_segment]
+                    }
+                ]
+
+            }
+        ]
+
+        # Extra filters for dimensions and metrics based on need.
         if dimensions_filters is not None:
-            query_params['dimensionFilterClauses'] = dimensions_filters
+            query_params['dimensionFilterClauses'].append(dimensions_filters)
 
         if metrics_filters is not None:
             query_params['metricFilterClauses'] = metrics_filters
@@ -210,46 +248,83 @@ class GoogleAnalytics:
         return complete_responses_list
 
     # Get user level data
-    def store_users(self):
-        dimensions = ['dimension1', 'deviceCategory']
+    def store_users(self, user_segment):
+        dimensions = ['dimension8', 'deviceCategory', 'browser']
         metrics = ['sessions', 'bounces',
                    'revenuePerUser', 'transactionsPerUser']
 
-        return self.run_report_and_store('users', dimensions, metrics)
+        return self.run_report_and_store('users', dimensions, metrics, user_segment)
+
+    # Get user device branding data separately from general user data because
+    # the google reporting API would only return mobile users if requested together
+    # with the rest of the data.
+    def store_users_mobile_brand(self, user_segment):
+        dimensions = ['dimension8', 'mobileDeviceBranding']
+        metrics = ['sessions']
+
+        return self.run_report_and_store('users_mobile_brand', dimensions, metrics, user_segment)
 
     # Get session level data
-    def store_sessions(self):
-        dimensions = ['dimension1', 'dimension2', 'searchUsed',
+    def store_sessions(self, user_segment):
+        dimensions = ['dimension8', 'dimension2', 'searchUsed',
                       'daysSinceLastSession']
-        metrics = ['sessionDuration', 'pageviews', 'uniquePageviews', 'transactions', 'transactionRevenue',
+        metrics = ['sessionDuration', 'uniquePageviews', 'transactions', 'transactionRevenue',
                    'uniquePurchases', 'searchResultViews', 'searchUniques', 'searchDepth', 'searchRefinements']
 
-        return self.run_report_and_store('sessions', dimensions, metrics)
+        return self.run_report_and_store('sessions', dimensions, metrics, user_segment)
+
+    # Get sessions shopping stages separately from general session data because shopping stages show up
+    # as one per row and would cause alot of data duplication for all the other columns.
+    def store_sessions_shopping_stages(self, user_segment):
+        dimensions = ['dimension8', 'dimension2', 'shoppingStage']
+        metrics = ['pageviews']
+
+        # Apply a filter when retrieving shopping stages so that we only get shopping stages relevant to
+        # our model.
+        dimensions_filters = {
+            "filters": [
+                {
+                    "dimensionName": "ga:shoppingStage",
+                    "operator": "IN_LIST",
+                    "expressions": ["ALL_VISITS", "PRODUCT_VIEW", "ADD_TO_CART", "CHECKOUT", "TRANSACTION"]
+                }
+            ]
+        }
+
+        return self.run_report_and_store('sessions_shopping_stages', dimensions, metrics, user_segment, dimensions_filters)
 
     # Get hit level data
-    def store_hits(self):
+    def store_hits(self, user_segment):
         dimensions = [
-            'dimension1', 'dimension2', 'dimension3', 'userType', 'shoppingStage', 'dateHourMinute'
+            'dimension8', 'dimension2', 'dimension3', 'userType', 'dateHourMinute'
         ]
+
+        # Pageviews is not used as a feature in the model since it is covered by
+        # unique pageviews in the session's request. We add it here so that
+        # hits that only have pageview events get retrieved aswell.
         metrics = ['timeOnPage', 'productListClicks',
-                   'productListViews', 'productDetailViews']
+                   'productListViews', 'productDetailViews', 'pageviews']
 
-        return self.run_report_and_store('hits', dimensions, metrics)
-
-    def store_transactions(self):
-        dimensions = ['dimension1', 'dimension2', 'transactionId', 'daysToTransaction',
-                      'sessionsToTransaction']
-
-        metrics = ['transactions']
-
-        return self.run_report_and_store('transactions', dimensions, metrics)
+        return self.run_report_and_store('hits', dimensions, metrics, user_segment)
 
     def run(self):
         self.authenticate()
-        self.store_users()
-        self.store_sessions()
-        self.store_hits()
-        self.store_transactions()
+
+        for i in range(1, 10):
+            user_segment = 'GA' + str(i)
+
+            # Add sleep() calls in between requests so as
+            # to not exceed the requests/time quota and get temporarily blocked.
+            self.store_users(user_segment)
+            sleep(1)
+            self.store_users_mobile_brand(user_segment)
+            sleep(1)
+            self.store_sessions(user_segment)
+            sleep(1)
+            self.store_sessions_shopping_stages(user_segment)
+            sleep(1)
+            self.store_hits(user_segment)
+            sleep(1)
 
 
 def main():

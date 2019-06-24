@@ -7,7 +7,7 @@ args = { 'owner': 'airflow',
          'retries': 16,
          'retry_delay': datetime.timedelta(minutes=30) }
 
-dag = DAG(dag_id='ga_chp_ingestion_pipeline',
+dag = DAG(dag_id='ga_epna_ingestion_pipeline',
           default_args=args,
           schedule_interval='0 12 * * *')
 
@@ -34,10 +34,3 @@ task_1_run_connector = BashOperator(
     bash_command=task_1_run_connector_cmd,
     dag=dag)
 
-# Do not remove the extra space at the end (the one after 'ga_epna_preflight_check_before_prediction_pipeline.sh')
-task_2_preflight_check_before_prediction_pipeline = BashOperator(
-    task_id='task_2_preflight_check_before_prediction_pipeline',
-    bash_command='bash /opt/ga_epna/ingestion/preflight_check/ga_epna_preflight_check_before_prediction_pipeline.sh ',
-    dag=dag)
-
-task_2_preflight_check_before_prediction_pipeline.set_upstream(task_1_run_connector)

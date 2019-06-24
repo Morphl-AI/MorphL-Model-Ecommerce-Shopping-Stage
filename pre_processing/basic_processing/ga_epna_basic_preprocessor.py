@@ -9,24 +9,16 @@ class BasicPreprocessor:
 
         self.MASTER_URL = 'local[*]'
         self.APPLICATION_NAME = 'preprocessor'
-        self.DAY_AS_STR = getenv('DAY_AS_STR')
-        self.UNIQUE_HASH = getenv('UNIQUE_HASH')
-
-        self.TRAINING_OR_PREDICTION = getenv('TRAINING_OR_PREDICTION')
-        self.MODELS_DIR = getenv('MODELS_DIR')
 
         self.MORPHL_SERVER_IP_ADDRESS = getenv('MORPHL_SERVER_IP_ADDRESS')
         self.MORPHL_CASSANDRA_USERNAME = getenv('MORPHL_CASSANDRA_USERNAME')
         self.MORPHL_CASSANDRA_PASSWORD = getenv('MORPHL_CASSANDRA_PASSWORD')
         self.MORPHL_CASSANDRA_KEYSPACE = getenv('MORPHL_CASSANDRA_KEYSPACE')
 
-        self.HDFS_PORT = 9000
-        self.HDFS_DIR_TRAINING = f'hdfs://{self.MORPHL_SERVER_IP_ADDRESS}:{self.HDFS_PORT}/{self.DAY_AS_STR}_{self.UNIQUE_HASH}_ga_epna_preproc_training'
-        self.HDFS_DIR_PREDICTION = f'hdfs://{self.MORPHL_SERVER_IP_ADDRESS}:{self.HDFS_PORT}/{self.DAY_AS_STR}_{self.UNIQUE_HASH}_ga_epna_preproc_prediction'
-
         self.init_keys()
         self.init_baselines()
 
+    # Initialize Cassandra tables primary keys.
     def init_keys(self):
 
         primary_key = {}
@@ -36,15 +28,20 @@ class BasicPreprocessor:
                                       'day_of_data_capture', 'session_id']
         primary_key['ga_epnah_df'] = [
             'client_id', 'day_of_data_capture', 'session_id', 'hit_id']
-        primary_key['ga_epnat_df'] = ['client_id',
-                                      'day_of_data_capture', 'session_id', 'transaction_id']
 
         self.primary_key = primary_key
 
+    # Get all the features that need to be parsed from the jsons.
     def init_baselines(self):
 
         field_baselines = {}
 
+        # device_category: the type of device associated to the user: tablet, mobile or desktop;
+        # sessions: the number of sessions a user has;
+        # bounces: the number of bounced sessions a user has;
+        # browser: the type of browser used by a user;
+        # revenue_per_user: the amount of money a user has spent on the site;
+        # transactions_per_user: the number of transactions a user completed on the site.
         field_baselines['ga_epnau_df'] = [
             {'field_name': 'device_category',
              'original_name': 'ga:deviceCategory',
@@ -58,6 +55,10 @@ class BasicPreprocessor:
              'original_name': 'ga:bounces',
              'needs_conversion': True,
              },
+            {'field_name': 'browser',
+             'original_name': 'ga:browser',
+             'needs_conversion': False,
+             },
             {'field_name': 'revenue_per_user',
              'original_name': 'ga:revenuePerUser',
              'needs_conversion': True,
@@ -68,13 +69,21 @@ class BasicPreprocessor:
              },
         ]
 
+        # session_duration: the total duration of a session;
+        # unique_page_views: the number of unique pageviews during a session;
+        # transactions: the number of transactions completed in a session;
+        # transaction_revenue: the amount of money spent on the transactions in a session;
+        # unique_purchases: the number of unique items bought by the user in a session;
+        # search_result_views: the number of times a search result page was viewed in a session;
+        # search_uniques: total number of unique keywords from internal searches during a session;
+        # search_depth: total number of subsequent page views made after an internal search;
+        # search_refinements: the number of times a transition occurs between internal keywords search within a session
+        #                     ex: "shoes", "shoes", "pants", "pants" => 1 transition from shoes to pants
+        # search_used: a boolean representing wether an internal search used in a session;
+        # days_since_last_session: the number of days elapsed since the last sessions.
         field_baselines['ga_epnas_df'] = [
             {'field_name': 'session_duration',
              'original_name': 'ga:sessionDuration',
-             'needs_conversion': True,
-             },
-            {'field_name': 'page_views',
-             'original_name': 'ga:pageviews',
              'needs_conversion': True,
              },
             {'field_name': 'unique_page_views',
@@ -119,6 +128,9 @@ class BasicPreprocessor:
              },
         ]
 
+        # time_on_page: the amount of time a user spent on the page;
+        # date_hour_minute: the date, hour and minute the hit occured at.
+        # user_type: a boolean signifying wether the user is new or returning;
         field_baselines['ga_epnah_df'] = [
             {'field_name': 'time_on_page',
              'original_name': 'ga:timeOnPage',
@@ -132,17 +144,13 @@ class BasicPreprocessor:
              'original_name': 'ga:productListViews',
              'needs_conversion': True,
              },
-            {'field_name': 'product_detail_views',
-             'original_name': 'ga:productDetailViews',
-             'needs_conversion': True,
-             },
             {'field_name': 'user_type',
              'original_name': 'ga:userType',
              'needs_conversion': False,
              },
-            {'field_name': 'shopping_stage',
-             'original_name': 'ga:shoppingStage',
-             'needs_conversion': False,
+            {'field_name': 'product_detail_views',
+             'original_name': 'ga:productDetailViews',
+             'needs_conversion': True,
              },
             {'field_name': 'date_hour_minute',
              'original_name': 'ga:dateHourMinute',
@@ -150,19 +158,9 @@ class BasicPreprocessor:
              },
         ]
 
-        field_baselines['ga_epnat_df'] = [
-            {'field_name': 'days_to_transaction',
-             'original_name': 'ga:daysToTransaction',
-             'needs_conversion': True,
-             },
-            {'field_name': 'sessions_to_transaction',
-             'original_name': 'ga:sessionsToTransaction',
-             'needs_conversion': True,
-             },
-        ]
-
         self.field_baselines = field_baselines
 
+    # Initialize the spark sessions and return it.
     def get_spark_session(self):
 
         spark_session = (
@@ -181,6 +179,7 @@ class BasicPreprocessor:
 
         return spark_session
 
+    # Return a spark dataframe from a specified Cassandra table.
     def fetch_from_cassandra(self, c_table_name, spark_session):
 
         load_options = {
@@ -194,6 +193,7 @@ class BasicPreprocessor:
 
         return df
 
+    # Get the json schema of a df.
     def get_json_schemas(self, df, spark_session):
         return {
             'json_meta_schema': spark_session.read.json(
@@ -224,6 +224,7 @@ class BasicPreprocessor:
 
         return values
 
+    # Get the parsed jsons as dfs.
     def get_parsed_jsons(self, json_schemas, dataframes):
 
         after_json_parsing_df = {}
@@ -270,23 +271,9 @@ class BasicPreprocessor:
                     f.col('jdata.dimensions').alias('jdata_dimensions'),
                     f.col('jdata.metrics').alias('jdata_metrics')))
 
-        after_json_parsing_df['ga_epnat_df'] = (
-            dataframes['ga_epnat_df']
-            .withColumn('jmeta', f.from_json(
-                f.col('json_meta'), json_schemas['ga_epnat_df']['json_meta_schema']))
-            .withColumn('jdata', f.from_json(
-                f.col('json_data'), json_schemas['ga_epnat_df']['json_data_schema']))
-            .select(f.col('client_id'),
-                    f.col('day_of_data_capture'),
-                    f.col('session_id'),
-                    f.col('transaction_id'),
-                    f.col('jmeta.dimensions').alias('jmeta_dimensions'),
-                    f.col('jmeta.metrics').alias('jmeta_metrics'),
-                    f.col('jdata.dimensions').alias('jdata_dimensions'),
-                    f.col('jdata.metrics').alias('jdata_metrics')))
-
         return after_json_parsing_df
 
+    # Parse json data.
     def process_json_data(self, df, primary_key, field_baselines):
         schema_as_list = [
             fb['field_name']
@@ -344,12 +331,8 @@ class BasicPreprocessor:
         return {'result_df': result_df,
                 'schema_as_list': schema_as_list}
 
-    def save_raw_data(self, user_data, session_data, hit_data, transaction_data):
-
-        user_data.cache()
-        session_data.cache()
-        hit_data.cache()
-        transaction_data.cache()
+    # Save the raw dfs to Cassandra tables.
+    def save_raw_data(self, user_data, session_data, hit_data):
 
         save_options_ga_epnau_features_raw = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
@@ -362,10 +345,6 @@ class BasicPreprocessor:
         save_options_ga_epnah_features_raw = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
             'table': ('ga_epnah_features_raw')
-        }
-        save_options_ga_epnat_features_raw = {
-            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
-            'table': ('ga_epnat_features_raw')
         }
 
         (user_data
@@ -389,279 +368,11 @@ class BasicPreprocessor:
             .options(**save_options_ga_epnah_features_raw)
             .save())
 
-        (transaction_data
-            .write
-            .format('org.apache.spark.sql.cassandra')
-            .mode('append')
-            .options(**save_options_ga_epnat_features_raw)
-            .save())
-
-    def process_sessions_and_transactions_data(self, sessions_data, transactions_data):
-        sessions_data.cache()
-        transactions_data.cache()
-
-        sessions_data = sessions_data.drop('day_of_data_capture')
-
-        transactions_data = transactions_data.drop(
-            'day_of_data_capture', 'transaction_id')
-
-        joined_data = sessions_data.join(
-            transactions_data, on=['client_id', 'session_id'], how='outer')
-
-        final_data = joined_data.filter(
-            joined_data.session_duration > 0.0).na.fill(0)
-
-        return final_data.repartition(32)
-
-    def process_hits_data(self, hits_data, spark_session):
-
-        hits_data.cache()
-
-        hits_data = hits_data.drop('day_of_data_capture')
-
-        cart_and_transaction_df = hits_data[(
-            hits_data['shopping_stage'] == 'CART_ABANDONMENT') | (hits_data['shopping_stage'] == 'TRANSACTION')].dropDuplicates()
-
-        product_view_df = hits_data[hits_data['shopping_stage']
-                                    == 'PRODUCT_VIEW'].dropDuplicates()
-
-        cart_and_transaction_df.createOrReplaceTempView('cart_and_transaction')
-        product_view_df.createOrReplaceTempView('product_view')
-
-        clean_product_view_sql = 'SELECT * FROM product_view WHERE session_id NOT IN (SELECT session_id FROM cart_and_transaction)'
-
-        cleaned_product_view = spark_session.sql(clean_product_view_sql)
-
-        no_activity_df = hits_data[(
-            hits_data['shopping_stage'] == 'NO_SHOPPING_ACTIVITY')].dropDuplicates()
-
-        return cart_and_transaction_df.union(cleaned_product_view).union(no_activity_df).repartition(32)
-
-    def deaggregate_sessions(self, data, spark_session):
-        select_data = data.select('client_id', 'session_id', 'hit_id')
-
-        select_data.cache()
-
-        select_data.createOrReplaceTempView('select_data')
-
-        sql_parts = [
-            "SELECT client_id,",
-            "session_id,",
-            "hit_id,"
-            "ingredient_1 + ingredient_2 AS sessions",
-            "FROM (SELECT",
-            "client_id, session_id, ingredient_1, hit_id,",
-            "CASE WHEN rownum = 1 THEN 0 ELSE 1 END as ingredient_2",
-            "FROM (SELECT",
-            "client_id, session_id, hit_id,"
-            "DENSE_RANK() OVER (PARTITION BY client_id ORDER BY session_id) - 1 AS ingredient_1,",
-            "ROW_NUMBER() OVER (PARTITION BY client_id, session_id ORDER BY hit_id) AS rownum",
-            "FROM select_data",
-            ') AS step_1',
-            ") AS step_2",
-            "ORDER BY client_id, session_id"
-        ]
-
-        sql = ' '.join(sql_parts)
-
-        deag_df = spark_session.sql(sql)
-
-        return deag_df
-
-    def deaggregate_revenue_per_user(self, data, spark_session):
-        select_data = data.select(
-            'client_id', 'session_id', 'hit_id', 'transaction_revenue')
-
-        select_data.cache()
-
-        select_data.createOrReplaceTempView('select_data')
-
-        sql_parts = [
-            "SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "COALESCE(LAG(ingredient_2) OVER (PARTITION BY client_id ORDER BY session_id), 0) AS revenue_per_user",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "SUM(ingredient_1) OVER (PARTITION BY client_id ORDER BY session_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS ingredient_2",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "CASE WHEN rownum = 1 THEN transaction_revenue ELSE 0 END AS ingredient_1",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "transaction_revenue,",
-            "ROW_NUMBER() OVER (PARTITION BY client_id, session_id ORDER BY hit_id) AS rownum",
-            "FROM select_data",
-            ") AS step_1",
-            ") AS step_2",
-            ") AS step_3",
-            "ORDER BY",
-            "client_id,",
-            "session_id"
-        ]
-
-        sql = ' '.join(sql_parts)
-
-        deag_df = spark_session.sql(sql)
-
-        return deag_df
-
-    def deaggregate_transactions_per_user(self, data, spark_session):
-        select_data = data.select(
-            'client_id', 'session_id', 'hit_id', 'transactions')
-
-        select_data.cache()
-
-        select_data.createOrReplaceTempView('select_data')
-
-        sql_parts = [
-            "SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "COALESCE(LAG(ingredient_2) OVER (PARTITION BY client_id ORDER BY session_id), 0) AS transactions_per_user",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "SUM(ingredient_1) OVER (PARTITION BY client_id ORDER BY session_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS ingredient_2",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "CASE WHEN rownum = 1 THEN transactions ELSE 0 END AS ingredient_1",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "transactions,",
-            "ROW_NUMBER() OVER (PARTITION BY client_id, session_id ORDER BY hit_id) AS rownum",
-            "FROM select_data",
-            ") AS step_1",
-            ") AS step_2",
-            ") AS step_3",
-            "ORDER BY",
-            "client_id,",
-            "session_id"
-        ]
-
-        sql = ' '.join(sql_parts)
-
-        deag_df = spark_session.sql(sql)
-
-        return deag_df
-
-    def deaggregate_bounces(self, data, spark_session):
-        select_data = data.select(
-            'client_id', 'session_id', 'hit_id', 'transactions')
-
-        select_data.cache()
-
-        select_data.createOrReplaceTempView('select_data')
-
-        sql_parts = [
-            "SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "COALESCE(LAG(ingredient_2) OVER (PARTITION BY client_id ORDER BY session_id), 0) AS bounces",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "SUM(ingredient_1) OVER (PARTITION BY client_id ORDER BY session_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS ingredient_2",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "hit_id,",
-            "CASE WHEN rownum = 1 THEN CASE WHEN transactions > 0 THEN 0 ELSE 1 END ELSE 0 END AS ingredient_1",
-            "FROM (SELECT",
-            "client_id,",
-            "session_id,",
-            "transactions,",
-            "hit_id,",
-            "ROW_NUMBER() OVER (PARTITION BY client_id, session_id ORDER BY hit_id) AS rownum",
-            "FROM select_data",
-            ") AS step_1",
-            ") AS step_2",
-            ") AS step_3",
-            "ORDER BY",
-            "client_id,",
-            "session_id"
-        ]
-
-        sql = ' '.join(sql_parts)
-
-        deag_df = spark_session.sql(sql)
-
-        return deag_df
-
-    def deaggregate_data(self, data):
-        spark_session = self.get_spark_session()
-
-        deaggregated_sessions = self.deaggregate_sessions(data, spark_session)
-        deaggregated_revenue_per_user = self.deaggregate_revenue_per_user(
-            data, spark_session)
-
-        deaggregated_transactions_per_user = self.deaggregate_transactions_per_user(
-            data, spark_session)
-        deaggregated_bounces = self.deaggregate_bounces(data, spark_session)
-
-        join_fields = ['client_id', 'session_id', 'hit_id']
-
-        pruned_data = data.drop('sessions', 'bounces',
-                                'revenue_per_user', 'transactions_per_user')
-
-        return pruned_data.join(
-            deaggregated_sessions, on=join_fields, how='inner').join(
-                deaggregated_revenue_per_user, on=join_fields, how='inner').join(
-                    deaggregated_transactions_per_user, on=join_fields, how='inner').join(
-                        deaggregated_bounces, on=join_fields, how='inner'
-        ).dropDuplicates().sort(join_fields)
-
-    def process_data(self, user_data, session_data, hit_data, transaction_data):
-        spark_session = self.get_spark_session()
-
-        processed_session_and_transaction_data = self.process_sessions_and_transactions_data(
-            session_data, transaction_data)
-        processed_hit_data = self.process_hits_data(hit_data, spark_session)
-
-        user_and_sessions_data = user_data.join(
-            processed_session_and_transaction_data, on=['client_id'], how='inner').dropDuplicates()
-
-        aggregated_data = processed_hit_data.join(user_and_sessions_data, on=[
-            'client_id', 'session_id'], how='inner').dropDuplicates().na.fill(0)
-
-        deaggregated_data = self.deaggregate_data(aggregated_data)
-
-        return deaggregated_data.repartition(32)
-
-    def save_basic_preprocessed_data_to_cassandra(self, data):
-        data.cache()
-
-        save_options_ga_epna_preprocessed_features_basic = {
-            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
-            'table': ('ga_epna_preprocessed_features_basic')
-        }
-
-        (data
-            .write
-            .format('org.apache.spark.sql.cassandra')
-            .mode('append')
-            .options(**save_options_ga_epna_preprocessed_features_basic)
-            .save())
-
     def main(self):
 
         spark_session = self.get_spark_session()
 
+        # Get the number of days to process.
         ga_config_df = (
             self.fetch_from_cassandra(
                 'ga_epna_config_parameters', spark_session)
@@ -672,6 +383,7 @@ class BasicPreprocessor:
         start_date = ((datetime.datetime.now(
         ) - datetime.timedelta(days=days_worth_of_data_to_load)).strftime('%Y-%m-%d'))
 
+        # Fetch required tables from Cassandra.
         ga_epna_users_df = self.fetch_from_cassandra(
             'ga_epna_users', spark_session)
 
@@ -681,11 +393,9 @@ class BasicPreprocessor:
         ga_epna_hits_df = self.fetch_from_cassandra(
             'ga_epna_hits', spark_session)
 
-        ga_epna_transactions_df = self.fetch_from_cassandra(
-            'ga_epna_transactions', spark_session)
-
         dataframes = {}
 
+        # Filter them by the date we need.
         dataframes['ga_epnau_df'] = (
             ga_epna_users_df
             .filter("day_of_data_capture >= '{}'".format(start_date)))
@@ -698,20 +408,15 @@ class BasicPreprocessor:
             ga_epna_hits_df
             .filter("day_of_data_capture >= '{}'".format(start_date)))
 
-        dataframes['ga_epnat_df'] = (
-            ga_epna_transactions_df
-            .filter("day_of_data_capture >= '{}'".format(start_date)))
-
         json_schemas = {}
 
+        # Get each df's json schema.
         json_schemas['ga_epnau_df'] = self.get_json_schemas(
             dataframes['ga_epnau_df'], spark_session)
         json_schemas['ga_epnas_df'] = self.get_json_schemas(
             dataframes['ga_epnas_df'], spark_session)
         json_schemas['ga_epnah_df'] = self.get_json_schemas(
             dataframes['ga_epnah_df'], spark_session)
-        json_schemas['ga_epnat_df'] = self.get_json_schemas(
-            dataframes['ga_epnat_df'], spark_session)
 
         after_json_parsing_df = self.get_parsed_jsons(json_schemas, dataframes)
 
@@ -727,34 +432,13 @@ class BasicPreprocessor:
                                                      self.primary_key['ga_epnah_df'],
                                                      self.field_baselines['ga_epnah_df'])
 
-        processed_transactions_dict = self.process_json_data(after_json_parsing_df['ga_epnat_df'],
-                                                             self.primary_key['ga_epnat_df'],
-                                                             self.field_baselines['ga_epnat_df'])
+        users_df = processed_users_dict['result_df']
 
-        users_df = (
-            processed_users_dict['result_df']
-        )
+        sessions_df = processed_sessions_dict['result_df']
 
-        sessions_df = (
-            processed_sessions_dict['result_df']
-        )
+        hits_df = processed_hits_dict['result_df']
 
-        hits_df = (
-            processed_hits_dict['result_df']
-        )
-
-        transactions_df = (
-            processed_transactions_dict['result_df']
-            .drop('transactions')
-        )
-
-        self.save_raw_data(users_df, sessions_df, hits_df, transactions_df)
-        processed_data = self.process_data(
-            users_df, sessions_df, hits_df, transactions_df)
-
-        processed_data.write.parquet(self.HDFS_DIR_TRAINING)
-
-        self.save_basic_preprocessed_data_to_cassandra(processed_data)
+        self.save_raw_data(users_df, sessions_df, hits_df)
 
 
 if __name__ == '__main__':
