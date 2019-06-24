@@ -285,15 +285,15 @@ def main():
     log4j.LogManager.getRootLogger().setLevel(log4j.Level.ERROR)
 
     sessions = fetch_from_cassandra(
-        'exga_epna_data_sessions', spark_session)
+        'ga_epna_data_sessions', spark_session)
     hits = fetch_from_cassandra(
-        'exga_epna_data_hits', spark_session)
+        'ga_epna_data_hits', spark_session)
     users = fetch_from_cassandra(
-        'exga_epna_data_users', spark_session)
+        'ga_epna_data_users', spark_session)
     num_items = fetch_from_cassandra(
-        'exga_epna_data_num_hits', spark_session)
+        'ga_epna_data_num_hits', spark_session)
     shopping_stage = fetch_from_cassandra(
-        'exga_epna_data_shopping_stages', spark_session)
+        'ga_epna_data_shopping_stages', spark_session)
 
     model = ModelLSTM_V1(inputShape=(7, 12, 4), outputShape=6, hyperParameters={"randomizeSessionSize": True,
                                                                                 "appendPreviousOutput": True,
@@ -356,8 +356,20 @@ def main():
                 f.row_number().over(Window.orderBy(f.monotonically_increasing_id()))
             ).
             join(order_df, 'index', 'inner').
+            drop('index').
             repartition(32)
-
+            
         )
+        
+        save_options_ga_epna_predictions = {
+            'keyspace': MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epna_predictions')
+        }
 
-        print(result_df.first())
+        (result_df.
+         write.
+         format('org.apache.spark.sql.cassandra').
+         mode('append').
+         options(**save_options_ga_epna_predictions).
+         save()
+        )
