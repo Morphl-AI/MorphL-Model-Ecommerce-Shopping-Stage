@@ -173,6 +173,17 @@ CREATE TABLE morphl.ga_epna_data_shopping_stages(
   PRIMARY KEY((session_count), client_id)
 );
 
+CREATE TABLE morphl.ga_epna_predictions(
+  client_id text, 
+  all_visits double, 
+  product_view double, 
+  add_to_cart double, 
+  checkout_with_add_to_cart double, 
+  checkout_without_add_to_cart double,
+  transaction double,
+  PRIMARY KEY((client_id))
+)
+
 
 CREATE TABLE morphl.ga_epna_config_parameters (
   morphl_component_name text,
