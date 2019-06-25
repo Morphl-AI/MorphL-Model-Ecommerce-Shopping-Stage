@@ -363,10 +363,10 @@ def main():
                 toDF([
                     'all_visits',
                     'product_view',
-                    'add_to_cart',
                     'checkout_with_add_to_cart',
-                    'checkout_without_add_to_cart',
                     'transaction'
+                    'add_to_cart',
+                    'checkout_without_add_to_cart',
                 ]).
                 withColumn(
                     'index',
