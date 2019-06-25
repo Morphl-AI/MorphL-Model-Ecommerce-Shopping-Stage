@@ -60,7 +60,9 @@ def calculate_browser_device_features(users_df, sessions_df):
                                      f.sum('transactions').alias(
                                          'transactions'),
                                      f.sum('transaction_revenue').alias(
-                                         'transaction_revenue')
+                                         'transaction_revenue'),
+                                     f.countDistinct(
+                                         'client_id').alias('users')
                                  ))
 
     # Calculate device revenue per transaction column
@@ -69,6 +71,10 @@ def calculate_browser_device_features(users_df, sessions_df):
                                      'device_revenue_per_transaction',
                                      transactions_by_device_df.transaction_revenue /
                                      (transactions_by_device_df.transactions + 1e-5)
+                                 )
+                                 .withColumn(
+                                     'device_transactions_per_user',
+                                     transactions_by_device_df.transactions / transactions_by_device_df.users
                                  )
                                  .drop('transactions', 'transaction_revenue')
                                  )
@@ -80,7 +86,9 @@ def calculate_browser_device_features(users_df, sessions_df):
                                       f.sum('transactions').alias(
                                           'transactions'),
                                       f.sum('transaction_revenue').alias(
-                                          'transaction_revenue')
+                                          'transaction_revenue'),
+                                      f.countDistinct(
+                                          'client_id').alias('users')
                                   ))
 
     # Calculate browser revenue per transaction column
@@ -89,6 +97,10 @@ def calculate_browser_device_features(users_df, sessions_df):
                                       'browser_revenue_per_transaction',
                                       transactions_by_browser_df.transaction_revenue /
                                       (transactions_by_browser_df.transactions + 1e-5)
+                                  )
+                                  .withColumn(
+                                      'browser_transactions_per_user',
+                                      transactions_by_browser_df.transactions / transactions_by_browser_df.users
                                   )
                                   .drop('transactions', 'transaction_revenue')
                                   )
@@ -112,7 +124,8 @@ def pad_with_zero(features, max_hit_count):
 
     for session_count in range(len(features)):
         features[session_count] = features[session_count] + \
-            [[0.0, 0.0, 0.0, 0.0]] * (max_hit_count - len(features[session_count]))
+            [[0.0, 0.0, 0.0, 0.0]] * \
+            (max_hit_count - len(features[session_count]))
 
     return features
 
@@ -253,8 +266,6 @@ def main():
                              'session_id',
                              f.array(
                                  f.col('time_on_page'),
-                                 f.col('product_list_clicks'),
-                                 f.col('product_list_views'),
                                  f.col('product_detail_views')
                              ).alias('hits_features')
                          ).groupBy('session_id')
@@ -303,12 +314,12 @@ def main():
                                      f.col('transaction_revenue'),
                                      f.col('unique_purchases'),
                                      f.col('days_since_last_session'),
-                                     f.col('with_site_search'),
-                                     f.col('without_site_search'),
                                      f.col('search_result_views'),
                                      f.col('search_uniques'),
                                      f.col('search_depth'),
-                                     f.col('search_refinements')
+                                     f.col('search_refinements'),
+                                     f.col('with_site_search'),
+                                     f.col('without_site_search')
                                  ).alias('session_features')
                              )
                              .groupBy('client_id')
@@ -351,13 +362,15 @@ def main():
                           select(
                               'client_id',
                               f.array(
+                                  f.col('device_transactions_per_user'),
+                                  f.col('device_revenue_per_transaction'),
+                                  f.col('browser_transactions_per_user'),
+                                  f.col('browser_revenue_per_transaction'),
+                                  f.col('is_desktop'),
                                   f.col('is_mobile'),
                                   f.col('is_tablet'),
-                                  f.col('is_desktop'),
                                   f.col('new_visitor'),
-                                  f.col('returning_visitor'),
-                                  f.col('device_revenue_per_transaction'),
-                                  f.col('browser_revenue_per_transaction')
+                                  f.col('returning_visitor')
                               ).alias('features')
                           ).join(
                               session_counts, 'client_id', 'inner'
