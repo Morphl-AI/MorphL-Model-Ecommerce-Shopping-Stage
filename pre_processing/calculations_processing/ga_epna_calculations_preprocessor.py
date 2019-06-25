@@ -240,7 +240,7 @@ def main():
                       .agg(
                           f.count('session_id').alias('session_count')
                       )
-                      .withColumn('user_segment', f.substring('client_id')))
+                      .withColumn('user_segment', f.substring('client_id', 1, 4)))
 
     session_counts.cache()
 
