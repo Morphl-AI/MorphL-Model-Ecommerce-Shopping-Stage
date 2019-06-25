@@ -307,23 +307,37 @@ def main():
 
         for segment_limit in range(10, 95, 5):
 
-            condition_string = "session_count == {} and user_segment >= {} and user_segment < {}".format(
-                session_count, 'GA' + str(segment_limit), 'GA' + str(segment_limit + 5))
-            
+            lower_limit = 'GA' + str(segment_limit)
+            upper_limit = 'GA' + str(segment_limit + 5)
+
+            condition_string = "session_count == {} and user_segment >= '{}' and user_segment < '{}'".format(
+                session_count, lower_limit, upper_limit)
+
             if segment_limit == 90:
+
                 condition_string = "session_count == {} and user_segment >= 'GA90'".format(
                     session_count)
+
+            filtered_users_df = users.filter(condition_string)
+
+            if len(filtered_users_df.head(1)) == 0:
+                continue
+
+            order_df = (filtered_users_df.
+                        select('client_id').
+                        withColumn(
+                            'index',
+                            f.row_number().over(Window.orderBy('client_id'))
+                        )
+                        )
+
+            users_array =np.array(filtered_users_df.orderBy('client_id').select(
+                'features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
 
             sessions_array = np.array(sessions.filter(condition_string).orderBy('client_id').select(
                 'features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
 
-            if (sessions_array.size == 0):
-                continue
-
             hits_array = np.array(hits.filter(condition_string).orderBy('client_id').select(
-                'features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
-
-            users_array = np.array(users.filter(condition_string).orderBy('client_id').select(
                 'features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
 
             num_items_array = np.array(num_items.filter(condition_string).orderBy(
@@ -331,15 +345,6 @@ def main():
 
             shopping_stage_array = np.array(shopping_stage.filter(condition_string).orderBy(
                 'client_id').select('shopping_stages').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
-
-            order_df = (sessions.
-                        select('client_id', 'session_count').
-                        filter(condition_string).
-                        withColumn(
-                            'index',
-                            f.row_number().over(Window.orderBy('client_id'))
-                        ).drop('session_count')
-                        )
 
             result = model.npForward({"dataSessions": sessions_array,
                                       "dataHits": hits_array,
