@@ -226,7 +226,8 @@ def main():
                       .groupBy('client_id')
                       .agg(
                           f.count('session_id').alias('session_count')
-                      ))
+                      )
+                      .withColumn('user_segment', f.substring('client_id')))
 
     session_counts.cache()
 
