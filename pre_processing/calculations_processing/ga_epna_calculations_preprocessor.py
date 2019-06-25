@@ -124,7 +124,7 @@ def pad_with_zero(features, max_hit_count):
 
     for session_count in range(len(features)):
         features[session_count] = features[session_count] + \
-            [[0.0, 0.0, 0.0, 0.0]] * \
+            [[0.0, 0.0]] * \
             (max_hit_count - len(features[session_count]))
 
     return features
