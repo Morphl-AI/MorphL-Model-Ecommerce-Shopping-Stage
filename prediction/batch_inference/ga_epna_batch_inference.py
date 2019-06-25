@@ -301,75 +301,87 @@ def main():
                                                                                 "outputType": "regression",
                                                                                 "attributionModeling": "linear"})
 
-    model.loadWeights("model_predict.pkl")
+    model.loadWeights('/opt/models/ga_epna_model_weights.pkl')
 
-    for session_count in range(1, 5):
+    for session_count in range(1, 40):
 
-        sessions_array = np.array(sessions.filter("session_count == {}".format(
-            session_count)).orderBy('client_id').select('features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
+        for segment_limit in range(10, 95, 5):
 
-        hits_array = np.array(hits.filter("session_count == {}".format(
-            session_count)).orderBy('client_id').select('features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
-
-        users_array = np.array(users.filter("session_count == {}".format(
-            session_count)).orderBy('client_id').select('features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
-
-        num_items_array = np.array(num_items.filter("session_count == {}".format(
-            session_count)).orderBy('client_id').select('sessions_hits_count').rdd.flatMap(lambda x: x).collect())
-
-        shopping_stage_array = np.array(shopping_stage.filter("session_count == {}".format(
-            session_count)).orderBy('client_id').select('shopping_stages').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
-
-        order_df = (sessions.
-                    select('client_id', 'session_count').
-                    filter('session_count =={}'.format(session_count)).
-                    withColumn(
-                        'index',
-                        f.row_number().over(Window.orderBy('client_id'))
-                    ).drop('session_count')
-                    )
-
-        result = model.npForward({"dataSessions": sessions_array,
-                                  "dataHits": hits_array,
-                                  "dataUsers": users_array,
-                                  "dataNumItems": num_items_array,
-                                  "dataShoppingStage": shopping_stage_array})
-
-        result = np.delete(
-            result, np.s_[:session_count - 1], axis=1).reshape(result.shape[0], 6)
-
-        result_df = (
-            spark_session.
-            sparkContext.
-            parallelize(result).
-            map(lambda x: [float(item) for item in x]).
-            toDF([
-                'all_visits',
-                'product_view',
-                'add_to_cart',
-                'checkout_with_add_to_cart',
-                'checkout_without_add_to_cart',
-                'transaction'
-            ]).
-            withColumn(
-                'index',
-                f.row_number().over(Window.orderBy(f.monotonically_increasing_id()))
-            ).
-            join(order_df, 'index', 'inner').
-            drop('index').
-            repartition(32)
+            condition_string = "session_count == {} and user_segment >= {} and user_segment < {}".format(
+                session_count, 'GA' + str(segment_limit), 'GA' + str(segment_limit + 5))
             
-        )
-        
-        save_options_ga_epna_predictions = {
-            'keyspace': MORPHL_CASSANDRA_KEYSPACE,
-            'table': ('ga_epna_predictions')
-        }
+            if segment_limit == 90:
+                condition_string = "session_count == {} and user_segment >= 'GA90'".format(
+                    session_count)
 
-        (result_df.
-         write.
-         format('org.apache.spark.sql.cassandra').
-         mode('append').
-         options(**save_options_ga_epna_predictions).
-         save()
-        )
+            sessions_array = np.array(sessions.filter(condition_string).orderBy('client_id').select(
+                'features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
+
+            if (sessions_array.size == 0):
+                continue
+
+            hits_array = np.array(hits.filter(condition_string).orderBy('client_id').select(
+                'features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
+
+            users_array = np.array(users.filter(condition_string).orderBy('client_id').select(
+                'features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
+
+            num_items_array = np.array(num_items.filter(condition_string).orderBy(
+                'client_id').select('sessions_hits_count').rdd.flatMap(lambda x: x).collect())
+
+            shopping_stage_array = np.array(shopping_stage.filter(condition_string).orderBy(
+                'client_id').select('shopping_stages').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
+
+            order_df = (sessions.
+                        select('client_id', 'session_count').
+                        filter(condition_string).
+                        withColumn(
+                            'index',
+                            f.row_number().over(Window.orderBy('client_id'))
+                        ).drop('session_count')
+                        )
+
+            result = model.npForward({"dataSessions": sessions_array,
+                                      "dataHits": hits_array,
+                                      "dataUsers": users_array,
+                                      "dataNumItems": num_items_array,
+                                      "dataShoppingStage": shopping_stage_array})
+
+            result = np.delete(
+                result, np.s_[:session_count - 1], axis=1).reshape(result.shape[0], 6)
+
+            result_df = (
+                spark_session.
+                sparkContext.
+                parallelize(result).
+                map(lambda x: [float(item) for item in x]).
+                toDF([
+                    'all_visits',
+                    'product_view',
+                    'add_to_cart',
+                    'checkout_with_add_to_cart',
+                    'checkout_without_add_to_cart',
+                    'transaction'
+                ]).
+                withColumn(
+                    'index',
+                    f.row_number().over(Window.orderBy(f.monotonically_increasing_id()))
+                ).
+                join(order_df, 'index', 'inner').
+                drop('index').
+                repartition(32)
+
+            )
+
+            save_options_ga_epna_predictions = {
+                'keyspace': MORPHL_CASSANDRA_KEYSPACE,
+                'table': ('ga_epna_predictions')
+            }
+
+            (result_df.
+             write.
+             format('org.apache.spark.sql.cassandra').
+             mode('append').
+             options(**save_options_ga_epna_predictions).
+             save()
+             )
