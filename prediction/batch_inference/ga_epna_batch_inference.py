@@ -295,12 +295,13 @@ def main():
     shopping_stage = fetch_from_cassandra(
         'ga_epna_data_shopping_stages', spark_session)
 
-    model = ModelLSTM_V1(inputShape=(7, 12, 4), outputShape=6, hyperParameters={"randomizeSessionSize": True,
+    model = ModelLSTM_V1(inputShape=(9, 12, 2), outputShape=6, hyperParameters={"randomizeSessionSize": True,
                                                                                 "appendPreviousOutput": True,
                                                                                 "baseNeurons": 30,
                                                                                 "outputType": "regression",
+                                                                                'normalization': 'min_max',
+                                                                                'inShape': (9,12,2),
                                                                                 "attributionModeling": "linear"})
-
     model.loadWeights('/opt/models/ga_epna_model_weights.pkl')
 
     for session_count in range(1, 40):
