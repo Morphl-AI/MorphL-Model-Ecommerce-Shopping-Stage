@@ -140,38 +140,43 @@ CREATE TABLE morphl.ga_epna_shopping_stages_filtered(
 
 CREATE TABLE morphl.ga_epna_data_hits(
   client_id text,
+  user_segment text,
   session_count int, 
   features frozen<list<frozen<list<frozen<list<double>>>>>>,
-  PRIMARY KEY((session_count), client_id)
-);
+  PRIMARY KEY((session_count), user_segment, client_id)
+) WITH CLUSTERING ORDER BY (user_segment ASC);
 
 CREATE TABLE morphl.ga_epna_data_sessions(
   client_id text,
+  user_segment text,
   session_count int,
   features frozen<list<frozen<list<double>>>>,
-  PRIMARY KEY((session_count), client_id)
-);
+  PRIMARY KEY((session_count), user_segment, client_id)
+) WITH CLUSTERING ORDER BY (user_segment ASC);
 
 CREATE TABLE morphl.ga_epna_data_users(
   client_id text,
+  user_segment text, 
   session_count int, 
   features frozen<list<double>>,
-  PRIMARY KEY((session_count), client_id)
-);
+  PRIMARY KEY((session_count), user_segment, client_id)
+) WITH CLUSTERING ORDER BY (user_segment ASC);
 
 CREATE TABLE morphl.ga_epna_data_num_hits(
   client_id text,
+  user_segment text,
   session_count int,
   sessions_hits_count frozen<list<int>>,
-  PRIMARY KEY ((session_count), client_id)
-)
+  PRIMARY KEY((session_count), user_segment, client_id)
+) WITH CLUSTERING ORDER BY (user_segment ASC);
 
 CREATE TABLE morphl.ga_epna_data_shopping_stages(
   client_id text,
+  user_segment text, 
   session_count int, 
   shopping_stages frozen<list<frozen<list<double>>>>,
-  PRIMARY KEY((session_count), client_id)
-);
+  PRIMARY KEY((session_count), user_segment, client_id)
+) WITH CLUSTERING ORDER BY (user_segment ASC);
 
 CREATE TABLE morphl.ga_epna_predictions(
   client_id text, 
