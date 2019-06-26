@@ -391,3 +391,6 @@ def main():
              options(**save_options_ga_epna_predictions).
              save()
              )
+            
+if __name__ == '__main__':
+    main()
