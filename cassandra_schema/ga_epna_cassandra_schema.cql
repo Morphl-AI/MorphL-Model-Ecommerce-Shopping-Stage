@@ -1,5 +1,6 @@
 CREATE KEYSPACE IF NOT EXISTS morphl WITH REPLICATION = {'class': 'SimpleStrategy', 'replication_factor': 1};
 
+DROP TABLE IF EXISTS morphl.ga_epna_users;
 
 CREATE TABLE morphl.ga_epna_users (
   client_id text,
@@ -9,12 +10,16 @@ CREATE TABLE morphl.ga_epna_users (
   PRIMARY KEY ((client_id), day_of_data_capture)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
+DROP TABLE IF EXISTS morphl.ga_epna_users_mobile_brand;
+
 CREATE TABLE morphl.ga_epna_users_mobile_brand (
   client_id text,
   day_of_data_capture date,
   mobile_device_branding text,
   PRIMARY KEY ((client_id), day_of_data_capture)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
+
+DROP TABLE IF EXISTS morphl.ga_epna_sessions;
 
 CREATE TABLE morphl.ga_epna_sessions (
   client_id text,
@@ -25,6 +30,8 @@ CREATE TABLE morphl.ga_epna_sessions (
   PRIMARY KEY ((client_id), day_of_data_capture, session_id)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
+DROP TABLE IF EXISTS morphl.ga_epna_sessions_shopping_stages;
+
 CREATE TABLE morphl.ga_epna_sessions_shopping_stages (
     client_id text,
     day_of_data_capture date,
@@ -32,6 +39,8 @@ CREATE TABLE morphl.ga_epna_sessions_shopping_stages (
     shopping_stage text,
     PRIMARY KEY ((client_id), day_of_data_capture, session_id, shopping_stage)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC, session_id ASC);
+
+DROP TABLE IF EXISTS morphl.ga_epna_hits;
 
 CREATE TABLE morphl.ga_epna_hits (
   client_id text,
@@ -42,6 +51,8 @@ CREATE TABLE morphl.ga_epna_hits (
   json_data text,
   PRIMARY KEY ((client_id), day_of_data_capture, session_id, hit_id)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
+
+DROP TABLE IF EXISTS morphl.ga_epnau_features_raw;
 
 CREATE TABLE morphl.ga_epnau_features_raw (
     client_id text,
@@ -55,7 +66,9 @@ CREATE TABLE morphl.ga_epnau_features_raw (
     PRIMARY KEY ((client_id), day_of_data_capture)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
-CREATE TABLE morphl.ga_epnas_features_raw(
+DROP TABLE IF EXISTS morphl.ga_epnas_features_raw;
+
+CREATE TABLE morphl.ga_epnas_features_raw (
   client_id text,
   day_of_data_capture date,
   session_id text, 
@@ -73,8 +86,9 @@ CREATE TABLE morphl.ga_epnas_features_raw(
   PRIMARY KEY ((client_id), day_of_data_capture, session_id)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
+DROP TABLE IF EXISTS morphl.ga_epnah_features_raw;
 
-CREATE TABLE morphl.ga_epnah_features_raw(
+CREATE TABLE morphl.ga_epnah_features_raw (
   client_id text,
   day_of_data_capture date,
   session_id text,
@@ -88,6 +102,8 @@ CREATE TABLE morphl.ga_epnah_features_raw(
   PRIMARY KEY ((client_id), day_of_data_capture, session_id, hit_id)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
+DROP TABLE IF EXISTS morphl.ga_epnau_features_filtered;
+
 CREATE TABLE morphl.ga_epnau_features_filtered (
     client_id text,
     device_category text,
@@ -100,7 +116,9 @@ CREATE TABLE morphl.ga_epnau_features_filtered (
     PRIMARY KEY ((client_id))
 );
 
-CREATE TABLE morphl.ga_epnas_features_filtered(
+DROP TABLE IF EXISTS morphl.ga_epnas_features_filtered;
+
+CREATE TABLE morphl.ga_epnas_features_filtered (
   client_id text,
   session_id text, 
   search_used text,
@@ -117,8 +135,9 @@ CREATE TABLE morphl.ga_epnas_features_filtered(
   PRIMARY KEY ((client_id), session_id)
 );
 
+DROP TABLE IF EXISTS morphl.ga_epnah_features_filtered;
 
-CREATE TABLE morphl.ga_epnah_features_filtered(
+CREATE TABLE morphl.ga_epnah_features_filtered (
   client_id text,
   session_id text,
   hit_id text, 
@@ -131,14 +150,18 @@ CREATE TABLE morphl.ga_epnah_features_filtered(
   PRIMARY KEY ((client_id),session_id, hit_id)
 );
 
-CREATE TABLE morphl.ga_epna_shopping_stages_filtered(
+DROP TABLE IF EXISTS morphl.ga_epna_shopping_stages_filtered;
+
+CREATE TABLE morphl.ga_epna_shopping_stages_filtered (
   client_id text, 
   session_id text,
   shopping_stage text,
   PRIMARY KEY((client_id), session_id)
 );
 
-CREATE TABLE morphl.ga_epna_data_hits(
+DROP TABLE IF EXISTS morphl.ga_epna_data_hits;
+
+CREATE TABLE morphl.ga_epna_data_hits (
   client_id text,
   user_segment text,
   session_count int, 
@@ -146,7 +169,9 @@ CREATE TABLE morphl.ga_epna_data_hits(
   PRIMARY KEY((session_count), user_segment, client_id)
 ) WITH CLUSTERING ORDER BY (user_segment ASC);
 
-CREATE TABLE morphl.ga_epna_data_sessions(
+DROP TABLE IF EXISTS morphl.ga_epna_data_sessions;
+
+CREATE TABLE morphl.ga_epna_data_sessions (
   client_id text,
   user_segment text,
   session_count int,
@@ -154,7 +179,9 @@ CREATE TABLE morphl.ga_epna_data_sessions(
   PRIMARY KEY((session_count), user_segment, client_id)
 ) WITH CLUSTERING ORDER BY (user_segment ASC);
 
-CREATE TABLE morphl.ga_epna_data_users(
+DROP TABLE IF EXISTS morphl.ga_epna_data_users;
+
+CREATE TABLE morphl.ga_epna_data_users (
   client_id text,
   user_segment text, 
   session_count int, 
@@ -162,7 +189,9 @@ CREATE TABLE morphl.ga_epna_data_users(
   PRIMARY KEY((session_count), user_segment, client_id)
 ) WITH CLUSTERING ORDER BY (user_segment ASC);
 
-CREATE TABLE morphl.ga_epna_data_num_hits(
+DROP TABLE IF EXISTS morphl.ga_epna_data_num_hits;
+
+CREATE TABLE morphl.ga_epna_data_num_hits (
   client_id text,
   user_segment text,
   session_count int,
@@ -170,13 +199,17 @@ CREATE TABLE morphl.ga_epna_data_num_hits(
   PRIMARY KEY((session_count), user_segment, client_id)
 ) WITH CLUSTERING ORDER BY (user_segment ASC);
 
-CREATE TABLE morphl.ga_epna_data_shopping_stages(
+DROP TABLE IF EXISTS morphl.ga_epna_data_shopping_stages;
+
+CREATE TABLE morphl.ga_epna_data_shopping_stages (
   client_id text,
   user_segment text, 
   session_count int, 
   shopping_stages frozen<list<frozen<list<double>>>>,
   PRIMARY KEY((session_count), user_segment, client_id)
 ) WITH CLUSTERING ORDER BY (user_segment ASC);
+
+DROP TABLE IF EXISTS morphl.ga_epna_predictions;
 
 CREATE TABLE morphl.ga_epna_predictions(
   client_id text, 
@@ -189,6 +222,7 @@ CREATE TABLE morphl.ga_epna_predictions(
   PRIMARY KEY((client_id))
 );
 
+DROP TABLE IF EXISTS morphl.ga_epna_config_parameters;
 
 CREATE TABLE morphl.ga_epna_config_parameters (
   morphl_component_name text,
