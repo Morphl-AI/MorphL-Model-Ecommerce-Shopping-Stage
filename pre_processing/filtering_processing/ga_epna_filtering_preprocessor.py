@@ -65,8 +65,8 @@ def format_and_filter_shopping_stages(stages):
     stages.sort()
     stages = '|'.join(stages)
     stages = 'TRANSACTION' if stages.find('TRANSACTION') != -1 else stages
-    stages = stages if stages in stages_to_keep else 'ALL_VISITS'
     stages = stages if stages != 'PRODUCT_VIEW' else 'ALL_VISITS|PRODUCT_VIEW'
+    stages = stages if stages in stages_to_keep else 'ALL_VISITS'
 
     return stages
 
@@ -87,18 +87,14 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
 
     # Get client_ids that exist in all dfs
     complete_client_ids = (client_ids_users
-                           .join(
-                               client_ids_sessions,
-                               'client_id',
-                               'inner')
-                           .join(
-                               client_ids_hits,
-                               'client_id',
-                               'inner')
-                           .join(
+                           .intersect(
+                               client_ids_sessions
+                            )
+                           .intersect(
+                               client_ids_hits
+                            )
+                           .intersect(
                                client_ids_with_stages,
-                               'client_id',
-                               'inner'
                            )
                            )
 
@@ -187,6 +183,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
 
     # Group shopping stages per session into a set.
     final_shopping_stages_df = (shopping_stages_df.
+                                join(complete_client_ids,'client_id', 'inner').
                                 orderBy('session_id').
                                 groupBy('session_id').
                                 agg(f.first('client_id').alias('client_id'),
