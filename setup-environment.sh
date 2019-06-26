@@ -20,3 +20,6 @@ chmod -R 775 /opt/secrets/ga_epna
 chmod 660 /opt/secrets/ga_epna/viewid.txt
 chmod 660 /opt/secrets/ga_epna/service_account.json
 chgrp airflow /opt/secrets/ga_epna /opt/secrets/ga_epna/service_account.json /opt/secrets/ga_epna/viewid.txt
+
+echo 'Environment variables have been created. Please re-login as the airflow user.'
+echo
