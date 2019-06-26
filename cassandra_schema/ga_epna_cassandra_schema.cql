@@ -189,6 +189,19 @@ CREATE TABLE morphl.ga_epna_predictions(
   PRIMARY KEY((client_id))
 );
 
+DROP TABLE IF EXISTS morphl.ga_epna_predictions_access_logs;
+
+CREATE TABLE morphl.ga_epna_predictions_access_logs (
+  client_id text,
+  tstamp timestamp,
+  all_visits double, 
+  product_view double, 
+  add_to_cart double, 
+  checkout_with_add_to_cart double, 
+  checkout_without_add_to_cart double,
+  transaction double,
+  PRIMARY KEY ((client_id), tstamp)
+) WITH CLUSTERING ORDER BY (tstamp DESC);
 
 CREATE TABLE morphl.ga_epna_config_parameters (
   morphl_component_name text,
@@ -199,3 +212,6 @@ CREATE TABLE morphl.ga_epna_config_parameters (
 
 INSERT INTO morphl.ga_epna_config_parameters (morphl_component_name,parameter_name,parameter_value)
 VALUES ('ga_epna','days_worth_of_data_to_load','60');
+
+INSERT INTO morphl.ga_epna_predictions (client_id, all_visits, product_view, add_to_cart, checkout_with_add_to_cart, checkout_without_add_to_cart, transaction)
+VALUES ('GA1test.test',0.9,0.8,0.5,0.4,0.3,0.2);
