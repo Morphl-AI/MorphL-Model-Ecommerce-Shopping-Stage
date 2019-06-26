@@ -187,7 +187,7 @@ CREATE TABLE morphl.ga_epna_predictions(
   checkout_without_add_to_cart double,
   transaction double,
   PRIMARY KEY((client_id))
-)
+);
 
 
 CREATE TABLE morphl.ga_epna_config_parameters (
