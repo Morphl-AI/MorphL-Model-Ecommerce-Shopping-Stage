@@ -328,7 +328,7 @@ def main():
                         select('client_id').
                         withColumn(
                             'index',
-                            f.row_number().over(Window.orderBy('client_id'))
+                            f.row_number().over(Window.orderBy('client_id') - 1)
                         )
                         )
 
