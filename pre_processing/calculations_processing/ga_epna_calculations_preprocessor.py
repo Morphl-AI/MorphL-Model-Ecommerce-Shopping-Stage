@@ -366,11 +366,11 @@ def main():
                                   f.col('device_revenue_per_transaction'),
                                   f.col('browser_transactions_per_user'),
                                   f.col('browser_revenue_per_transaction'),
+                                  f.col('new_visitor'),
+                                  f.col('returning_visitor'),
                                   f.col('is_desktop'),
                                   f.col('is_mobile'),
                                   f.col('is_tablet'),
-                                  f.col('new_visitor'),
-                                  f.col('returning_visitor')
                               ).alias('features')
                           ).join(
                               session_counts, 'client_id', 'inner'
