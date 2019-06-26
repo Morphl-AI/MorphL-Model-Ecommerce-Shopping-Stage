@@ -183,6 +183,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
 
     # Group shopping stages per session into a set.
     final_shopping_stages_df = (shopping_stages_df.
+                                join(complete_client_ids,'client_id', 'inner').
                                 orderBy('session_id').
                                 groupBy('session_id').
                                 agg(f.first('client_id').alias('client_id'),
