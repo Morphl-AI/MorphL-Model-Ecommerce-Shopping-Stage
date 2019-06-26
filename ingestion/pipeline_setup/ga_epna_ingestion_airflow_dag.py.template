@@ -2,10 +2,10 @@ import datetime
 from airflow.models import DAG
 from airflow.operators.bash_operator import BashOperator
 
-args = { 'owner': 'airflow',
-         'start_date': START_DATE_AS_PY_CODE,
-         'retries': 16,
-         'retry_delay': datetime.timedelta(minutes=30) }
+args = {'owner': 'airflow',
+        'start_date': START_DATE_AS_PY_CODE,
+        'retries': 16,
+        'retry_delay': datetime.timedelta(minutes=30)}
 
 dag = DAG(dag_id='ga_epna_ingestion_pipeline',
           default_args=args,
@@ -18,8 +18,8 @@ task_1_run_connector_cmd_parts = [
     '-v /opt/secrets:/opt/secrets:ro',
     '-v /opt/ga_epna:/opt/ga_epna:ro',
     '-e DAY_OF_DATA_CAPTURE',
-    '-e KEY_FILE_LOCATION',
-    '-e VIEW_ID',
+    '-e GA_EPNA_KEY_FILE_LOCATION',
+    '-e GA_EPNA_VIEW_ID',
     '-e ENVIRONMENT_TYPE',
     '-e MORPHL_SERVER_IP_ADDRESS',
     '-e MORPHL_CASSANDRA_USERNAME',
@@ -33,4 +33,3 @@ task_1_run_connector = BashOperator(
     task_id='task_1_run_connector',
     bash_command=task_1_run_connector_cmd,
     dag=dag)
-

@@ -139,8 +139,8 @@ class CassandraPersistence:
 class GoogleAnalytics:
     def __init__(self):
         self.SCOPES = ['https://www.googleapis.com/auth/analytics.readonly']
-        self.KEY_FILE_LOCATION = getenv('KEY_FILE_LOCATION')
-        self.VIEW_ID = getenv('VIEW_ID')
+        self.KEY_FILE_LOCATION = getenv('GA_EPNA_KEY_FILE_LOCATION')
+        self.VIEW_ID = getenv('GA_EPNA_VIEW_ID')
         self.API_PAGE_SIZE = 10000
         self.DAY_OF_DATA_CAPTURE = getenv('DAY_OF_DATA_CAPTURE')
         self.start_date = self.DAY_OF_DATA_CAPTURE
