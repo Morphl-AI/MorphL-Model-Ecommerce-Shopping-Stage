@@ -65,8 +65,8 @@ def format_and_filter_shopping_stages(stages):
     stages.sort()
     stages = '|'.join(stages)
     stages = 'TRANSACTION' if stages.find('TRANSACTION') != -1 else stages
-    stages = stages if stages in stages_to_keep else 'ALL_VISITS'
     stages = stages if stages != 'PRODUCT_VIEW' else 'ALL_VISITS|PRODUCT_VIEW'
+    stages = stages if stages in stages_to_keep else 'ALL_VISITS'
 
     return stages
 
