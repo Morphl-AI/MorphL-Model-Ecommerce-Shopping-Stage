@@ -308,12 +308,12 @@ def main():
             lower_limit = 'GA' + str(segment_limit)
             upper_limit = 'GA' + str(segment_limit + 5)
 
-            condition_string = "session_count == {} and user_segment >= '{}' and user_segment < '{}'".format(
+            condition_string = "session_count = {} and user_segment >= '{}' and user_segment < '{}'".format(
                 session_count, lower_limit, upper_limit)
 
             if segment_limit == 90:
 
-                condition_string = "session_count == {} and user_segment >= 'GA90'".format(
+                condition_string = "session_count = {} and user_segment >= 'GA90'".format(
                     session_count)
 
             filtered_users_df = users.filter(condition_string)
