@@ -368,12 +368,12 @@ class BasicPreprocessor:
         ga_config_df = (
             self.fetch_from_cassandra(
                 'ga_epna_config_parameters', spark_session)
-            .filter("morphl_component_name = 'ga_epna' AND parameter_name = 'days_worth_of_data_to_load'"))
+            .filter("morphl_component_name = 'ga_epna' AND parameter_name = 'days_prediction_interval'"))
 
-        days_worth_of_data_to_load = int(ga_config_df.first().parameter_value)
+        days_prediction_interval = int(ga_config_df.first().parameter_value)
 
         start_date = ((datetime.datetime.now(
-        ) - datetime.timedelta(days=days_worth_of_data_to_load)).strftime('%Y-%m-%d'))
+        ) - datetime.timedelta(days=days_prediction_interval)).strftime('%Y-%m-%d'))
 
         # Fetch required tables from Cassandra.
         ga_epna_users_df = self.fetch_from_cassandra(

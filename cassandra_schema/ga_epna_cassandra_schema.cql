@@ -246,4 +246,7 @@ CREATE TABLE morphl.ga_epna_config_parameters (
 );
 
 INSERT INTO morphl.ga_epna_config_parameters (morphl_component_name,parameter_name,parameter_value)
-VALUES ('ga_epna','days_worth_of_data_to_load','60');
+VALUES ('ga_epna','days_training_interval','60');
+
+INSERT INTO morphl.ga_epna_config_parameters (morphl_component_name,parameter_name,parameter_value)
+VALUES ('ga_epna','days_prediction_interval','60');
