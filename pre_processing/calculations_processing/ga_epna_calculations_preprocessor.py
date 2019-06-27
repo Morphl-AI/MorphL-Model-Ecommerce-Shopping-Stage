@@ -1,5 +1,5 @@
 from os import getenv
-from pyspark.sql import functions as f, SparkSession
+from pyspark.sql import functions as f, SparkSession, Window
 from pyspark.sql.types import ArrayType, DoubleType
 
 
@@ -135,7 +135,7 @@ def clip(value):
         return 0.0
     if value > 1.0:
         return 1.0
-    
+
     return value
 
 
@@ -148,26 +148,28 @@ def min_max_hits(hit_features):
 
     return hit_features
 
+
 def min_max_sessions(session_features):
     min = [10.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     max = [10488.0, 103.0, 1.0, 2268.0, 3.0, 144.0, 39.0, 18.0, 109.0, 21.0]
-    
+
     for i in range(0, 10):
-        session_features[i] = clip((session_features[i] - min[i]) / (max[i] - min[i]))
-        
-        
-    
+        session_features[i] = clip(
+            (session_features[i] - min[i]) / (max[i] - min[i]))
+
     return session_features
+
 
 def min_max_users(users_features):
     min = [0.0005, 839.268, 0.015, 1079.162]
     max = [0.024, 2063.59, 0.029, 3277.434]
-    
+
     for i in range(0, 4):
-        users_features[i] = clip((users_features[i] - min[i]) / (max[i] - min[i]))
-        
-    
+        users_features[i] = clip(
+            (users_features[i] - min[i]) / (max[i] - min[i]))
+
     return users_features
+
 
 def save_data(hits_data, hits_num_data, session_data, user_data, shopping_stages_data):
 
@@ -302,30 +304,32 @@ def main():
     #         hit[0.0, 0.0, 0.0, 0.0]
     #     ]
     # ]
+
+    hits_window_by_sessions = Window.partitionBy(
+        'session_id').orderBy('date_hour_minute')
+    hits_window_by_user = Window.partitionBy('client_id').orderBy('session_id')
+
     ga_epna_data_hits = (ga_epnah_features_filtered_df
-                         .orderBy('date_hour_minute')
                          .select(
                              'client_id',
                              'session_id',
+                             'date_hour_minute',
                              f.array(
                                  f.col('time_on_page'),
                                  f.col('product_detail_views')
                              ).alias('hits_features')
-                         )
-                         .withColumn('hits_features', min_maxer_hits('hits_features'))
-                         .groupBy('session_id')
-                         .agg(
-                             f.first('client_id').alias('client_id'),
-                             f.collect_list('hits_features').alias(
-                                 'hits_features')
-                         )
-                         .orderBy('session_id')
-                         .groupBy('client_id')
-                         .agg(
-                             f.collect_list(
-                                 'hits_features').alias('features')
-                         )
-                         .join(session_counts, 'client_id', 'inner')
+                         ).
+                         withColumn('hits_features', min_maxer_hits('hits_features')).
+                         withColumn('hits_features', f.collect_list('hits_features').over(hits_window_by_sessions)).
+                         groupBy('session_id').agg(
+                             f.last('hits_features').alias('hits_features'),
+                             f.first('client_id').alias('client_id')
+                         ).
+                         withColumn('hits_features', f.collect_list(
+                             'hits_features').over(hits_window_by_user))
+                         .groupBy('client_id').agg(
+                             f.last('hits_features').alias('features')
+                         ).join(session_counts, 'client_id', 'inner')
                          .join(hit_counts, 'session_count', 'inner')
                          .withColumn('features', zero_padder('features', 'max_hit_count'))
                          .drop('max_hit_count')
@@ -337,6 +341,9 @@ def main():
     #     session[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
     #     session[13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0]
     # ]
+    sessions_window_by_user = Window.partitionBy(
+        'client_id').orderBy('session_id')
+
     ga_epna_data_sessions = (ga_epnas_features_filtered_df
                              .withColumn(
                                  'with_site_search',
@@ -348,7 +355,6 @@ def main():
                                  f.when(f.col('search_used') == 'Visits Without Site Search', 1.0).otherwise(
                                      0.0)
                              )
-                             .orderBy('session_id')
                              .select(
                                  'client_id',
                                  'session_id',
@@ -368,11 +374,11 @@ def main():
                                  ).alias('session_features')
                              )
                              .withColumn('session_features', min_maxer_sessions('session_features'))
+                             .withColumn('session_features', f.collect_list('session_features').over(sessions_window_by_user))
                              .groupBy('client_id')
-                             .agg(
-                                 f.collect_list('session_features').alias(
-                                     'features')
-                             ).join(
+                             .agg(f.last('session_features').alias('features')
+                                  )
+                             .join(
                                  session_counts, 'client_id', 'inner'
                              )
                              .repartition(32)
@@ -424,11 +430,16 @@ def main():
                               session_counts, 'client_id', 'inner'
                           ).repartition(32)
                           )
+
     # Get the shopping stages arrays
     # user[
     #       session[stages],
     #       session[stages]
     # ]
+
+    stages_window_by_users = Window.partitionBy(
+        'client_id').orderBy('session_id')
+
     ga_epna_data_shopping_stages = (ga_epna_shopping_stages_filtered_df.
                                     withColumn(
                                         'shopping_stage_1', f.when(
@@ -453,7 +464,6 @@ def main():
                                     withColumn('shopping_stage_6', f.when(
                                         f.col('shopping_stage') == 'TRANSACTION', 1.0).otherwise(0.0)
                                     )
-                                    .orderBy('session_id')
                                     .select(
                                         'client_id',
                                         'session_id',
@@ -466,8 +476,12 @@ def main():
                                             f.col('shopping_stage_6')
                                         ).alias('shopping_stage')
                                     ).
+                                    withColumn('shopping_stage', f.collect_list('shopping_stage').over(stages_window_by_users)).
                                     groupBy('client_id').
-                                    agg(f.collect_list('shopping_stage').alias('shopping_stages')).
+                                    agg(
+                                        f.last('shopping_stage').alias(
+                                            'shopping_stage')
+                                    ).
                                     join(session_counts, 'client_id', 'inner').
                                     repartition(32)
                                     )
@@ -478,17 +492,20 @@ def main():
     #     numHitsSession2,
     #     numHitsSession3
     # ]
+
+    num_hits_window_by_user = Window.partitionBy(
+        'client_id').orderBy('session_id')
+
     ga_epna_data_num_hits = (ga_epnah_features_filtered_df.
-                             orderBy('date_hour_minute').
                              groupBy('session_id').
                              agg(
                                  f.first('client_id').alias('client_id'),
                                  f.count('hit_id').alias('hits_count')
                              ).
-                             orderBy('session_id').
+                             withColumn('sessions_hits_count', f.collect_list('hits_count').over(num_hits_window_by_user)).
                              groupBy('client_id').
                              agg(
-                                 f.collect_list('hits_count').alias(
+                                 f.last('sessions_hits_count').alias(
                                      'sessions_hits_count')
                              ).join(
                                  session_counts, 'client_id', 'inner'
