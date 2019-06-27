@@ -64,9 +64,6 @@ class ModelLSTM_V1(nn.Module):
                             (loadedParams, thisParams))
 
         for i, item in enumerate(trainableParams):
-            if item.shape != params[i].shape:
-                raise Exception("Inconsistent parameters: %d vs %d." %
-                                (item.shape, params[i].shape))
             with tr.no_grad():
                 item[:] = self.maybeCuda(params[i][:])
             item.requires_grad_(True)
@@ -391,6 +388,7 @@ def main():
              options(**save_options_ga_epna_predictions).
              save()
              )
+
 
 if __name__ == '__main__':
     main()
