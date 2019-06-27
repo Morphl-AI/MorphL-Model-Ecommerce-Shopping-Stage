@@ -300,7 +300,7 @@ def main():
                                                                                 "baseNeurons": 30,
                                                                                 "outputType": "regression",
                                                                                 'normalization': 'min_max',
-                                                                                'inShape': (9,12,2),
+                                                                                'inShape': (9, 12, 2),
                                                                                 "attributionModeling": "linear"})
     model.loadWeights('/opt/models/ga_epna_model_weights.pkl')
 
@@ -328,11 +328,11 @@ def main():
                         select('client_id').
                         withColumn(
                             'index',
-                            f.row_number().over(Window.orderBy('client_id'))
+                            f.row_number().over(Window.orderBy('client_id') - 1)
                         )
                         )
 
-            users_array =np.array(filtered_users_df.orderBy('client_id').select(
+            users_array = np.array(filtered_users_df.orderBy('client_id').select(
                 'features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
 
             sessions_array = np.array(sessions.filter(condition_string).orderBy('client_id').select(
@@ -356,27 +356,27 @@ def main():
             result = np.delete(
                 result, np.s_[:session_count - 1], axis=1).reshape(result.shape[0], 6)
 
+            to_int_udf = f.udf(lambda x: int(x), 'int')
+
             result_df = (
                 spark_session.
                 sparkContext.
                 parallelize(result).
-                map(lambda x: [float(item) for item in x]).
+                zipWithIndex().
+                map(lambda x: [float(item) for item in x[0]] + [float(x[1])]).
                 toDF([
                     'all_visits',
                     'product_view',
                     'checkout_with_add_to_cart',
-                    'transaction'
+                    'transaction',
                     'add_to_cart',
                     'checkout_without_add_to_cart',
+                    'index'
                 ]).
-                withColumn(
-                    'index',
-                    f.row_number().over(Window.orderBy(f.monotonically_increasing_id()))
-                ).
+                withColumn('index', to_int_udf('index')).
                 join(order_df, 'index', 'inner').
                 drop('index').
                 repartition(32)
-
             )
 
             save_options_ga_epna_predictions = {
@@ -391,6 +391,6 @@ def main():
              options(**save_options_ga_epna_predictions).
              save()
              )
-            
+
 if __name__ == '__main__':
     main()

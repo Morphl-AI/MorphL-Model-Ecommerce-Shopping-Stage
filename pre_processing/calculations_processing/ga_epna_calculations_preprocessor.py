@@ -130,6 +130,45 @@ def pad_with_zero(features, max_hit_count):
     return features
 
 
+def clip(value):
+    if value < 0.0:
+        return 0.0
+    if value > 1.0:
+        return 1.0
+    
+    return value
+
+
+def min_max_hits(hit_features):
+    min = [0.0, 0.0]
+    max = [1225.0, 1.0]
+
+    for i in range(0, 2):
+        hit_features[i] = clip((hit_features[i] - min[i]) / (max[i] - min[i]))
+
+    return hit_features
+
+def min_max_sessions(session_features):
+    min = [10.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    max = [10488.0, 103.0, 1.0, 2268.0, 3.0, 144.0, 39.0, 18.0, 109.0, 21.0]
+    
+    for i in range(0, 10):
+        session_features[i] = clip((session_features[i] - min[i]) / (max[i] - min[i]))
+        
+        
+    
+    return session_features
+
+def min_max_users(users_features):
+    min = [0.0005, 839.268, 0.015, 1079.162]
+    max = [0.024, 2063.59, 0.029, 3277.434]
+    
+    for i in range(0, 4):
+        users_features[i] = clip((users_features[i] - min[i]) / (max[i] - min[i]))
+        
+    
+    return users_features
+
 def save_data(hits_data, hits_num_data, session_data, user_data, shopping_stages_data):
 
     save_options_ga_epna_data_hits = {
@@ -244,6 +283,10 @@ def main():
 
     session_counts.cache()
 
+    min_maxer_hits = f.udf(min_max_hits, ArrayType(DoubleType()))
+    min_maxer_sessions = f.udf(min_max_sessions, ArrayType(DoubleType()))
+    min_maxer_users = f.udf(min_max_users, ArrayType(DoubleType()))
+
     # Initialize udf
     zero_padder = f.udf(pad_with_zero, ArrayType(
         ArrayType(ArrayType(DoubleType()))))
@@ -268,7 +311,9 @@ def main():
                                  f.col('time_on_page'),
                                  f.col('product_detail_views')
                              ).alias('hits_features')
-                         ).groupBy('session_id')
+                         )
+                         .withColumn('hits_features', min_maxer_hits('hits_features'))
+                         .groupBy('session_id')
                          .agg(
                              f.first('client_id').alias('client_id'),
                              f.collect_list('hits_features').alias(
@@ -322,6 +367,7 @@ def main():
                                      f.col('without_site_search')
                                  ).alias('session_features')
                              )
+                             .withColumn('session_features', min_maxer_sessions('session_features'))
                              .groupBy('client_id')
                              .agg(
                                  f.collect_list('session_features').alias(
@@ -366,13 +412,15 @@ def main():
                                   f.col('device_revenue_per_transaction'),
                                   f.col('browser_transactions_per_user'),
                                   f.col('browser_revenue_per_transaction'),
+                                  f.col('new_visitor'),
+                                  f.col('returning_visitor'),
                                   f.col('is_desktop'),
                                   f.col('is_mobile'),
                                   f.col('is_tablet'),
-                                  f.col('new_visitor'),
-                                  f.col('returning_visitor')
                               ).alias('features')
-                          ).join(
+                          )
+                          .withColumn('features', min_maxer_users('features'))
+                          .join(
                               session_counts, 'client_id', 'inner'
                           ).repartition(32)
                           )

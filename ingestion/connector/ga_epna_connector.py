@@ -302,8 +302,7 @@ class GoogleAnalytics:
         # Pageviews is not used as a feature in the model since it is covered by
         # unique pageviews in the session's request. We add it here so that
         # hits that only have pageview events get retrieved aswell.
-        metrics = ['timeOnPage', 'productListClicks',
-                   'productListViews', 'productDetailViews', 'pageviews']
+        metrics = ['timeOnPage', 'productDetailViews', 'pageviews']
 
         return self.run_report_and_store('hits', dimensions, metrics, user_segment)
 
