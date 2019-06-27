@@ -15,20 +15,14 @@ if [ ${rc} -eq 0 ]; then
   # Write configuration parameters in corresponding Cassandra table
   DAYS_TRAINING_INTERVAL=$(<${TEMPFILE_A})
   DAYS_PREDICTION_INTERVAL=$(<${TEMPFILE_B})
-
-  echo ${DAYS_TRAINING_INTERVAL}
-  echo ${DAYS_PREDICTION_INTERVAL}
-
   sed "s/DAYS_TRAINING_INTERVAL/${DAYS_TRAINING_INTERVAL}/g;s/DAYS_PREDICTION_INTERVAL/${DAYS_PREDICTION_INTERVAL}/g" /opt/ga_epna/ingestion/load_historical_data/insert_into_ga_epna_config_parameters.cql.template > /tmp/insert_into_config_parameters.cql
   cqlsh ${MORPHL_SERVER_IP_ADDRESS} -u morphl -p ${MORPHL_CASSANDRA_PASSWORD} -f /tmp/insert_into_config_parameters.cql
 
   # Reset Airflow and create dags
   echo 'Initiating the data load ...'
-  echo
   stop_airflow.sh
-  airflow delete 
-  # airflow delete_dag ga_epna_training_pipeline
-  airflow delete_dag ga_epna_prediction_pipeline
+  rm -rf /home/airflow/airflow/dags/*
+  airflow resetdb -y &>/dev/null
   python /opt/orchestrator/bootstrap/runasairflow/python/set_up_airflow_authentication.py
   
   # Create ingestion dag
