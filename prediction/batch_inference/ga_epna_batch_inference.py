@@ -65,7 +65,7 @@ class ModelLSTM_V1(nn.Module):
 
         for i, item in enumerate(trainableParams):
             with tr.no_grad():
-                item[:] = self.maybeCuda(params[i][:])
+                item[:] = params[i][:].to(device)
             item.requires_grad_(True)
         print("Succesfully loaded weights (%d parameters) " % (loadedParams))
 
@@ -110,16 +110,10 @@ class ModelLSTM_V1(nn.Module):
                 npResults[key] = self.getNpData(results[key])
 
         elif type(results) == tr.Tensor:
-            npResults = self.maybeCpu(results.detach()).numpy()
+            npResults = results.detach().to('cpu').numpy()
         else:
             assert False, "Got type %s" % (type(results))
         return npResults
-
-    def maybeCpu(self, x):
-        return x.cpu() if tr.cuda.is_available() and hasattr(x, "cpu") else x
-
-    def maybeCuda(self, x):
-        return x.cuda() if tr.cuda.is_available() and hasattr(x, "cuda") else x
 
     def getTrData(self, data):
         trData = None
@@ -136,9 +130,9 @@ class ModelLSTM_V1(nn.Module):
             for key in data:
                 trData[key] = self.getTrData(data[key])
         elif type(data) is np.ndarray:
-            trData = self.maybeCuda(tr.from_numpy(data))
+            trData = tr.from_numpy(data).to(device)
         elif type(data) is tr.Tensor:
-            trData = self.maybeCuda(data)
+            trData = data.to(device)
         return trData
 
     def getNumParams(self, params):
