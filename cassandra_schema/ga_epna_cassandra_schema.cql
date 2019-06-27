@@ -82,8 +82,6 @@ CREATE TABLE morphl.ga_epnah_features_raw(
   hit_id text, 
   date_hour_minute text,
   time_on_page double,
-  product_list_clicks double,
-  product_list_views double,
   product_detail_views double,
   PRIMARY KEY ((client_id), day_of_data_capture, session_id, hit_id)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
@@ -125,8 +123,6 @@ CREATE TABLE morphl.ga_epnah_features_filtered(
   date_hour_minute text,
   user_type text,
   time_on_page double,
-  product_list_clicks double,
-  product_list_views double,
   product_detail_views double,
   PRIMARY KEY ((client_id),session_id, hit_id)
 );
