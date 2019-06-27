@@ -59,7 +59,12 @@ with open(argv[1], 'w') as fh1:
 with open(argv[2], 'w') as fh2:
     fh2.write(str(predictions_interval))
 
-# Set the today's date as py code
+# Set the ingestion date as py code
+# @todo When the training pipeline is added, the following date should include the training window
 with open(argv[3], 'w') as fh3:
+    fh3.write(date_from_p.__repr__())
+
+# Set the today's date as py code
+with open(argv[4], 'w') as fh3:
     now = datetime.datetime.now()
     fh3.write(now.__repr__())

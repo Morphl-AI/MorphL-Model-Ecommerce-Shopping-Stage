@@ -2,10 +2,12 @@
 export TEMPFILE_A=$(mktemp)
 # TEMPFILE_B is the duration of the predictions interval in days
 export TEMPFILE_B=$(mktemp)
-# TEMPFILE_C is the Python start date (today)
+# TEMPFILE_C is the Python start date for ingestion
 export TEMPFILE_C=$(mktemp)
+# TEMPFILE_D is the Python start date for predictions (today)
+export TEMPFILE_D=$(mktemp)
 
-python /opt/ga_epna/ingestion/load_historical_data/ga_epna_load_historical_data.py ${TEMPFILE_A} ${TEMPFILE_B} ${TEMPFILE_C}
+python /opt/ga_epna/ingestion/load_historical_data/ga_epna_load_historical_data.py ${TEMPFILE_A} ${TEMPFILE_B} ${TEMPFILE_C} ${TEMPFILE_D}
 rc=$?
 if [ ${rc} -eq 0 ]; then
   echo 'Emptying the relevant Cassandra tables ...'
@@ -25,7 +27,7 @@ if [ ${rc} -eq 0 ]; then
   airflow resetdb -y &>/dev/null
   python /opt/orchestrator/bootstrap/runasairflow/python/set_up_airflow_authentication.py
   
-  # Create ingestion dag
+  # Create ingestion dag and trigger pipeline
   START_DATE_AS_PY_CODE=$(<${TEMPFILE_C})
   sed "s/START_DATE_AS_PY_CODE/${START_DATE_AS_PY_CODE}/g" /opt/ga_epna/ingestion/pipeline_setup/ga_epna_ingestion_airflow_dag.py.template > /home/airflow/airflow/dags/ga_epna_ingestion_pipeline.py
 
@@ -35,7 +37,7 @@ if [ ${rc} -eq 0 ]; then
   # airflow trigger_dag ga_epna_training_pipeline
   
   # Create prediction dag
-  # START_DATE_AS_PY_CODE=$(<${TEMPFILE_C})
+  # START_DATE_AS_PY_CODE=$(<${TEMPFILE_D})
   # sed "s/START_DATE_AS_PY_CODE/${START_DATE_AS_PY_CODE}/g;s/DAYS_PREDICTION_INTERVAL/${DAYS_PREDICTION_INTERVAL}/g" /opt/ga_epna/prediction/pipeline_setup/ga_epna_prediction_airflow_dag.py.template > /home/airflow/airflow/dags/ga_epna_prediction_pipeline.py
   
   start_airflow.sh
