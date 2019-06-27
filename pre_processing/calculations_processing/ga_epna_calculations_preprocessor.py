@@ -480,7 +480,7 @@ def main():
                                     groupBy('client_id').
                                     agg(
                                         f.last('shopping_stage').alias(
-                                            'shopping_stage')
+                                            'shopping_stages')
                                     ).
                                     join(session_counts, 'client_id', 'inner').
                                     repartition(32)
