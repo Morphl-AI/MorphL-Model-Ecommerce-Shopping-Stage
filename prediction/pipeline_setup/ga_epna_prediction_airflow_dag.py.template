@@ -1,0 +1,146 @@
+import datetime
+from airflow.models import DAG
+from airflow.operators.bash_operator import BashOperator
+
+args = {'owner': 'airflow',
+        'start_date': START_DATE_AS_PY_CODE,
+        'retries': 16,
+        'retry_delay': datetime.timedelta(minutes=30)}
+
+dag = DAG(dag_id='ga_epna_prediction_pipeline',
+          default_args=args,
+          schedule_interval='0 3 * * *')
+
+# try:
+#     with open('/tmp/ga_epna_prediction_pipeline_unique_hash.txt', 'r') as f:
+#         unique_hash = f.read().strip()
+# except:
+#     unique_hash = ''
+
+unique_hash = 'jx5cmguwrk28dsza'
+
+# Do not remove the extra space at the end (the one after 'ga_chp_truncate_tables_before_prediction_pipeline.sh')
+task_1_truncate_tables_cmd_parts = [
+    f'UNIQUE_HASH={unique_hash}',
+    '-e UNIQUE_HASH',
+    'bash /opt/ga_epna/prediction/pipeline_setup/ga_epna_truncate_tables_before_prediction_pipeline.sh ']
+task_1_truncate_tables_cmd = ' '.join(task_1_truncate_tables_cmd_parts)
+
+# Do not remove the extra space at the end (the one after 'runbasicpreprocessor.sh')
+task_2_run_basic_preprocessor_cmd_parts = [
+    f'UNIQUE_HASH={unique_hash}',
+    'PREDICTION_DAY_AS_STR = {{ds}}',
+    'TRAINING_OR_PREDICTION=prediction',
+    'docker run --rm --net host',
+    '-v /opt/ga_epna:/opt/ga_epna:ro',
+    '-e ENVIRONMENT_TYPE',
+    '-e UNIQUE_HASH',
+    '-e PREDICTION_DAY_AS_STR',
+    '-e TRAINING_OR_PREDICTION',
+    '-e MORPHL_SERVER_IP_ADDRESS',
+    '-e MORPHL_CASSANDRA_USERNAME',
+    '-e MORPHL_CASSANDRA_KEYSPACE',
+    '-e MORPHL_CASSANDRA_PASSWORD',
+    'pysparkcontainer',
+    'bash /opt/ga_epna/pre_processing/basic_processing/runbasicpreprocessor.sh ']
+task_2_run_basic_preprocessor_cmd = ' '.join(
+    task_2_run_basic_preprocessor_cmd_parts)
+
+# Do not remove the extra space at the end (the one after 'runfilteringpreprocessor.sh')
+task_3_run_filtering_preprocessor_cmd_parts = [
+    f'UNIQUE_HASH={unique_hash}',
+    'PREDICTION_DAY_AS_STR = {{ds}}',
+    'TRAINING_OR_PREDICTION=prediction',
+    'docker run --rm --net host',
+    '-v /opt/ga_epna:/opt/ga_epna:ro',
+    '-v /opt/hadoop/etc/hadoop:/opt/hadoop/etc/hadoop:ro',
+    '-e ENVIRONMENT_TYPE',
+    '-e UNIQUE_HASH',
+    '-e PREDICTION_DAY_AS_STR',
+    '-e TRAINING_OR_PREDICTION',
+    '-e MORPHL_SERVER_IP_ADDRESS',
+    '-e MORPHL_CASSANDRA_USERNAME',
+    '-e MORPHL_CASSANDRA_KEYSPACE',
+    '-e MORPHL_CASSANDRA_PASSWORD',
+    'pysparkcontainer',
+    'bash /opt/ga_epna/pre_processing/filtering_processing/runfilteringpreprocessor.sh ']
+task_3_run_filtering_preprocessor_cmd = ' '.join(
+    task_3_run_filtering_preprocessor_cmd_parts)
+
+# Do not remove the extra space at the end (the one after 'runcalculationspreprocessor.sh')
+task_4_run_calculations_preprocessor_cmd_parts = [
+    f'UNIQUE_HASH={unique_hash}',
+    'PREDICTION_DAY_AS_STR = {{ds}}',
+    'TRAINING_OR_PREDICTION=prediction',
+    'docker run --rm --net host',
+    '-v /opt/ga_epna:/opt/ga_epna:ro',
+    '-v /opt/hadoop/etc/hadoop:/opt/hadoop/etc/hadoop:ro',
+    '-e ENVIRONMENT_TYPE',
+    '-e UNIQUE_HASH',
+    '-e PREDICTION_DAY_AS_STR',
+    '-e TRAINING_OR_PREDICTION',
+    '-e MORPHL_SERVER_IP_ADDRESS',
+    '-e MORPHL_CASSANDRA_USERNAME',
+    '-e MORPHL_CASSANDRA_KEYSPACE',
+    '-e MORPHL_CASSANDRA_PASSWORD',
+    'pysparkcontainer',
+    'bash /opt/ga_epna/pre_processing/calculations_processing/runcalculationspreprocessor.sh ']
+task_4_run_calculations_preprocessor_cmd = ' '.join(
+    task_4_run_calculations_preprocessor_cmd_parts)
+
+# # Do not remove the extra space at the end (the one after 'runbatchinference.sh')
+task_5_run_batch_inference_cmd_parts = [
+    f'UNIQUE_HASH={unique_hash}',
+    'PREDICTION_DAY_AS_STR={{ ds }}',
+    'TRAINING_OR_PREDICTION=prediction',
+    'MODELS_DIR=/opt/models',
+    'docker run --rm --net host',
+    '-v /opt/ga_epna:/opt/ga_epna:ro',
+    '-v /opt/models:/opt/models:ro',
+    '-e ENVIRONMENT_TYPE',
+    '-e UNIQUE_HASH',
+    '-e PREDICTION_DAY_AS_STR',
+    '-e TRAINING_OR_PREDICTION',
+    '-e MODELS_DIR',
+    '-e MORPHL_SERVER_IP_ADDRESS',
+    '-e MORPHL_CASSANDRA_USERNAME',
+    '-e MORPHL_CASSANDRA_KEYSPACE',
+    '-e MORPHL_CASSANDRA_PASSWORD',
+    'pysparkcontainer',
+    'bash /opt/ga_epna/prediction/batch_inference/runbatchinference.sh ']
+task_5_run_batch_inference_cmd = ' '.join(task_5_run_batch_inference_cmd_parts)
+
+# Do not remove the extra space at the end (the one after 'ga_epna_generate_id_files_prediction.sh')
+task_1_truncate_tables = BashOperator(
+    task_id='task_1_truncate_tables',
+    bash_command=task_1_truncate_tables_cmd,
+    dag=dag)
+
+task_2_run_basic_preprocessor = BashOperator(
+    task_id='task_3_run_extractor',
+    bash_command=task_2_run_basic_preprocessor_cmd,
+    dag=dag)
+
+task_3_run_filtering_preprocessor = BashOperator(
+    task_id='task_3_run_filtering_preprocessor',
+    bash_command=task_3_run_filtering_preprocessor_cmd,
+    dag=dag)
+
+task_4_run_calculations_preprocessor = BashOperator(
+    task_id='task_4_run_calculations_preprocessor',
+    bash_command=task_4_run_calculations_preprocessor_cmd,
+    dag=dag)
+
+task_5_run_batch_inference = BashOperator(
+    task_id='task_5_run_batch_inference',
+    bash_command=task_5_run_batch_inference_cmd,
+    dag=dag)
+
+task_2_run_basic_preprocessor.set_upstream(task_1_truncate_tables)
+task_3_run_filtering_preprocessor.set_upstream(task_2_run_basic_preprocessor)
+task_4_run_calculations_preprocessor.set_upstream(
+    task_3_run_filtering_preprocessor)
+task_5_run_batch_inference.set_upstream(
+    task_4_run_calculations_preprocessor)
+
+# @todo clean up HDFS files
