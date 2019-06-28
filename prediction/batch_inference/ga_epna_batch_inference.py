@@ -17,7 +17,6 @@ MORPHL_CASSANDRA_KEYSPACE = getenv('MORPHL_CASSANDRA_KEYSPACE')
 
 HDFS_PORT = 9000
 PREDICTION_DAY_AS_STR = getenv('PREDICTION_DAY_AS_STR')
-UNIQUE_HASH = getenv('UNIQUE_HASH')
 
 MASTER_URL = 'local[*]'
 APPLICATION_NAME = 'batch-inference'
@@ -275,16 +274,22 @@ def main():
     log4j = spark_session.sparkContext._jvm.org.apache.log4j
     log4j.LogManager.getRootLogger().setLevel(log4j.Level.ERROR)
 
+    users_ingested = fetch_from_cassandra(
+        'ga_epnau_features_raw', spark_session)
+
+    current_day_ids = users_ingested.select('client_id').where(
+        "day_of_data_capture = {}").format(PREDICTION_DAY_AS_STR)
+
     sessions = fetch_from_cassandra(
-        'ga_epna_data_sessions', spark_session)
+        'ga_epna_data_sessions', spark_session).join(current_day_ids, 'client_id', 'inner')
     hits = fetch_from_cassandra(
-        'ga_epna_data_hits', spark_session)
+        'ga_epna_data_hits', spark_session).join(current_day_ids, 'client_id', 'inner')
     users = fetch_from_cassandra(
-        'ga_epna_data_users', spark_session)
+        'ga_epna_data_users', spark_session).join(current_day_ids, 'client_id', 'inner')
     num_items = fetch_from_cassandra(
-        'ga_epna_data_num_hits', spark_session)
+        'ga_epna_data_num_hits', spark_session).join(current_day_ids, 'client_id', 'inner')
     shopping_stage = fetch_from_cassandra(
-        'ga_epna_data_shopping_stages', spark_session)
+        'ga_epna_data_shopping_stages', spark_session).join(current_day_ids, 'client_id', 'inner')
 
     model = ModelLSTM_V1(inputShape=(9, 12, 2), outputShape=6, hyperParameters={"randomizeSessionSize": True,
                                                                                 "appendPreviousOutput": True,
@@ -319,7 +324,7 @@ def main():
                         select('client_id').
                         withColumn(
                             'index',
-                            f.row_number().over(Window.orderBy('client_id') - 1)
+                            f.row_number().over(Window.orderBy('client_id')) - 1
                         )
                         )
 
