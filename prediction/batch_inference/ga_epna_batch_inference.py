@@ -277,7 +277,7 @@ def main():
         'ga_epnau_features_raw', spark_session)
 
     current_day_ids = users_ingested.select('client_id').where(
-        "day_of_data_capture = {}").format(PREDICTION_DAY_AS_STR)
+        "day_of_data_capture = '{}'".format(PREDICTION_DAY_AS_STR))
 
     sessions = fetch_from_cassandra(
         'ga_epna_data_sessions', spark_session).join(current_day_ids, 'client_id', 'inner')
@@ -300,11 +300,12 @@ def main():
     model.loadWeights('/opt/models/ga_epna_model_weights.pkl')
 
     for session_count in range(1, 40):
-
-        for segment_limit in range(10, 95, 5):
-
+        segment_range = range(10, 95, 5) if session_count < 5 else range(10, 100, 10)
+        
+        for segment_limit in segment_range:
+            
             lower_limit = 'GA' + str(segment_limit)
-            upper_limit = 'GA' + str(segment_limit + 5)
+            upper_limit = 'GA' + str(segment_limit + 5) if session_count < 5 else str(segment_limit + 10)
 
             condition_string = "session_count = {} and user_segment >= '{}' and user_segment < '{}'".format(
                 session_count, lower_limit, upper_limit)
