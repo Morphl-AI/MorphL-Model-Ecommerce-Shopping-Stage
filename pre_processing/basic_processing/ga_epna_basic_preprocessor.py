@@ -129,8 +129,9 @@ class BasicPreprocessor:
         ]
 
         # time_on_page: the amount of time a user spent on the page;
-        # date_hour_minute: the date, hour and minute the hit occured at.
+        # date_hour_minute: the date, hour and minute the hit occured at;
         # user_type: a boolean signifying wether the user is new or returning;
+        # product_detail_views: number of time the product details were viewed.
         field_baselines['ga_epnah_df'] = [
             {'field_name': 'time_on_page',
              'original_name': 'ga:timeOnPage',
