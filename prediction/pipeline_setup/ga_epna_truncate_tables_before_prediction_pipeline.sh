@@ -1,4 +1,4 @@
 cqlsh ${MORPHL_SERVER_IP_ADDRESS} -u morphl -p ${MORPHL_CASSANDRA_PASSWORD} \
-  -f /opt/ga_chp/prediction/pipeline_setup/ga_chp_truncate_tables_before_prediction_pipeline.cql
+  -f /opt/ga_epna/prediction/pipeline_setup/ga_epna_truncate_tables_before_prediction_pipeline.cql
 
 exit 0
