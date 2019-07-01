@@ -26,8 +26,15 @@ task_1_truncate_tables_cmd_parts = [
     'bash /opt/ga_epna/prediction/pipeline_setup/ga_epna_truncate_tables_before_prediction_pipeline.sh ']
 task_1_truncate_tables_cmd = ' '.join(task_1_truncate_tables_cmd_parts)
 
+# Do not remove the extra space at the end (the one after 'ga_epna_clean_up_hdfs_before_prediction_pipeline.sh')
+task_2_clean_up_hdfs_cmd_parts = [
+    f'UNIQUE_HASH={unique_hash}',
+    'PREDICTION_DAY_AS_STR={{ ds }}',
+    'bash /opt/ga_epna/prediction/pipeline_setup/ga_epna_clean_up_hdfs_before_prediction_pipeline.sh ']
+task_2_clean_up_hdfs_cmd = ' '.join(task_2_clean_up_hdfs_cmd_parts)
+
 # Do not remove the extra space at the end (the one after 'runbasicpreprocessor.sh')
-task_2_run_basic_preprocessor_cmd_parts = [
+task_3_run_basic_preprocessor_cmd_parts = [
     f'UNIQUE_HASH={unique_hash}',
     'PREDICTION_DAY_AS_STR={{ ds }}',
     'TRAINING_OR_PREDICTION=prediction',
@@ -43,11 +50,11 @@ task_2_run_basic_preprocessor_cmd_parts = [
     '-e MORPHL_CASSANDRA_PASSWORD',
     'pysparkcontainer',
     'bash /opt/ga_epna/pre_processing/basic_processing/runbasicpreprocessor.sh ']
-task_2_run_basic_preprocessor_cmd = ' '.join(
-    task_2_run_basic_preprocessor_cmd_parts)
+task_3_run_basic_preprocessor_cmd = ' '.join(
+    task_3_run_basic_preprocessor_cmd_parts)
 
 # Do not remove the extra space at the end (the one after 'runfilteringpreprocessor.sh')
-task_3_run_filtering_preprocessor_cmd_parts = [
+task_4_run_filtering_preprocessor_cmd_parts = [
     f'UNIQUE_HASH={unique_hash}',
     'PREDICTION_DAY_AS_STR={{ ds }}',
     'TRAINING_OR_PREDICTION=prediction',
@@ -64,11 +71,11 @@ task_3_run_filtering_preprocessor_cmd_parts = [
     '-e MORPHL_CASSANDRA_PASSWORD',
     'pysparkcontainer',
     'bash /opt/ga_epna/pre_processing/filtering_processing/runfilteringpreprocessor.sh ']
-task_3_run_filtering_preprocessor_cmd = ' '.join(
-    task_3_run_filtering_preprocessor_cmd_parts)
+task_4_run_filtering_preprocessor_cmd = ' '.join(
+    task_4_run_filtering_preprocessor_cmd_parts)
 
 # Do not remove the extra space at the end (the one after 'runcalculationspreprocessor.sh')
-task_4_run_calculations_preprocessor_cmd_parts = [
+task_5_run_calculations_preprocessor_cmd_parts = [
     f'UNIQUE_HASH={unique_hash}',
     'PREDICTION_DAY_AS_STR={{ ds }}',
     'TRAINING_OR_PREDICTION=prediction',
@@ -85,11 +92,11 @@ task_4_run_calculations_preprocessor_cmd_parts = [
     '-e MORPHL_CASSANDRA_PASSWORD',
     'pysparkcontainer',
     'bash /opt/ga_epna/pre_processing/calculations_processing/runcalculationspreprocessor.sh ']
-task_4_run_calculations_preprocessor_cmd = ' '.join(
-    task_4_run_calculations_preprocessor_cmd_parts)
+task_5_run_calculations_preprocessor_cmd = ' '.join(
+    task_5_run_calculations_preprocessor_cmd_parts)
 
 # # Do not remove the extra space at the end (the one after 'runbatchinference.sh')
-task_5_run_batch_inference_cmd_parts = [
+task_6_run_batch_inference_cmd_parts = [
     f'UNIQUE_HASH={unique_hash}',
     'PREDICTION_DAY_AS_STR={{ ds }}',
     'TRAINING_OR_PREDICTION=prediction',
@@ -108,50 +115,42 @@ task_5_run_batch_inference_cmd_parts = [
     '-e MORPHL_CASSANDRA_PASSWORD',
     'pysparkcontainer',
     'bash /opt/ga_epna/prediction/batch_inference/runbatchinference.sh ']
-task_5_run_batch_inference_cmd = ' '.join(task_5_run_batch_inference_cmd_parts)
-
-# Do not remove the extra space at the end (the one after 'ga_epna_clean_up_hdfs_after_prediction_pipeline.sh')
-task_6_clean_up_hdfs_cmd_parts = [
-    f'UNIQUE_HASH={unique_hash}',
-    'PREDICTION_DAY_AS_STR={{ ds }}',
-    'bash /opt/ga_epna/prediction/pipeline_setup/ga_epna_clean_up_hdfs_after_prediction_pipeline.sh ']
-task_6_clean_up_hdfs_cmd = ' '.join(task_6_clean_up_hdfs_cmd_parts)
+task_6_run_batch_inference_cmd = ' '.join(task_6_run_batch_inference_cmd_parts)
 
 task_1_truncate_tables = BashOperator(
     task_id='task_1_truncate_tables',
     bash_command=task_1_truncate_tables_cmd,
     dag=dag)
 
-task_2_run_basic_preprocessor = BashOperator(
-    task_id='task_2_run_basic_preprocessor',
-    bash_command=task_2_run_basic_preprocessor_cmd,
+task_2_clean_up_hdfs = BashOperator(
+    task_id='task_2_clean_up_hdfs',
+    bash_command=task_2_clean_up_hdfs_cmd,
     dag=dag)
 
-task_3_run_filtering_preprocessor = BashOperator(
-    task_id='task_3_run_filtering_preprocessor',
-    bash_command=task_3_run_filtering_preprocessor_cmd,
+task_3_run_basic_preprocessor = BashOperator(
+    task_id='task_3_run_basic_preprocessor',
+    bash_command=task_3_run_basic_preprocessor_cmd,
     dag=dag)
 
-task_4_run_calculations_preprocessor = BashOperator(
-    task_id='task_4_run_calculations_preprocessor',
-    bash_command=task_4_run_calculations_preprocessor_cmd,
+task_4_run_filtering_preprocessor = BashOperator(
+    task_id='task_4_run_filtering_preprocessor',
+    bash_command=task_4_run_filtering_preprocessor_cmd,
     dag=dag)
 
-task_5_run_batch_inference = BashOperator(
-    task_id='task_5_run_batch_inference',
-    bash_command=task_5_run_batch_inference_cmd,
+task_5_run_calculations_preprocessor = BashOperator(
+    task_id='task_5_run_calculations_preprocessor',
+    bash_command=task_5_run_calculations_preprocessor_cmd,
     dag=dag)
 
-task_6_clean_up_hdfs = BashOperator(
-    task_id='task_6_clean_up_hdfs',
-    bash_command=task_6_clean_up_hdfs_cmd,
+task_6_run_batch_inference = BashOperator(
+    task_id='task_6_run_batch_inference',
+    bash_command=task_6_run_batch_inference_cmd,
     dag=dag)
 
-task_2_run_basic_preprocessor.set_upstream(task_1_truncate_tables)
-task_3_run_filtering_preprocessor.set_upstream(task_2_run_basic_preprocessor)
-task_4_run_calculations_preprocessor.set_upstream(
-    task_3_run_filtering_preprocessor)
-task_5_run_batch_inference.set_upstream(
-    task_4_run_calculations_preprocessor)
-task_6_clean_up_hdfs.set_upstream(
-    task_5_run_batch_inference)
+task_2_clean_up_hdfs.set_upstream(task_1_truncate_tables)
+task_3_run_basic_preprocessor.set_upstream(task_2_clean_up_hdfs)
+task_4_run_filtering_preprocessor.set_upstream(task_3_run_basic_preprocessor)
+task_5_run_calculations_preprocessor.set_upstream(
+    task_4_run_filtering_preprocessor)
+task_6_run_batch_inference.set_upstream(
+    task_5_run_calculations_preprocessor)
