@@ -22,8 +22,14 @@ env | grep GA_EPNA_KEY_FILE_LOCATION
 env | grep GA_EPNA_VIEW_ID
 ```
 
-4. Setup Cassandra tables and Airflow pipelines:
+4. Setup Cassandra tables:
 
 ```
 bash /opt/ga_epna/install.sh
+```
+
+5. Load data from the Google Analytics API and start pipelines:
+
+```
+bash /opt/ga_epna/ingestion/load_historical_data/load_ga_epna_historical_data.sh
 ```
