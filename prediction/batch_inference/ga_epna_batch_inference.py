@@ -17,7 +17,6 @@ MORPHL_CASSANDRA_KEYSPACE = getenv('MORPHL_CASSANDRA_KEYSPACE')
 
 HDFS_PORT = 9000
 PREDICTION_DAY_AS_STR = getenv('PREDICTION_DAY_AS_STR')
-UNIQUE_HASH = getenv('UNIQUE_HASH')
 
 MASTER_URL = 'local[*]'
 APPLICATION_NAME = 'batch-inference'
@@ -64,11 +63,8 @@ class ModelLSTM_V1(nn.Module):
                             (loadedParams, thisParams))
 
         for i, item in enumerate(trainableParams):
-            if item.shape != params[i].shape:
-                raise Exception("Inconsistent parameters: %d vs %d." %
-                                (item.shape, params[i].shape))
             with tr.no_grad():
-                item[:] = self.maybeCuda(params[i][:])
+                item[:] = params[i][:].to(device)
             item.requires_grad_(True)
         print("Succesfully loaded weights (%d parameters) " % (loadedParams))
 
@@ -113,16 +109,10 @@ class ModelLSTM_V1(nn.Module):
                 npResults[key] = self.getNpData(results[key])
 
         elif type(results) == tr.Tensor:
-            npResults = self.maybeCpu(results.detach()).numpy()
+            npResults = results.detach().to('cpu').numpy()
         else:
             assert False, "Got type %s" % (type(results))
         return npResults
-
-    def maybeCpu(self, x):
-        return x.cpu() if tr.cuda.is_available() and hasattr(x, "cpu") else x
-
-    def maybeCuda(self, x):
-        return x.cuda() if tr.cuda.is_available() and hasattr(x, "cuda") else x
 
     def getTrData(self, data):
         trData = None
@@ -139,9 +129,9 @@ class ModelLSTM_V1(nn.Module):
             for key in data:
                 trData[key] = self.getTrData(data[key])
         elif type(data) is np.ndarray:
-            trData = self.maybeCuda(tr.from_numpy(data))
+            trData = tr.from_numpy(data).to(device)
         elif type(data) is tr.Tensor:
-            trData = self.maybeCuda(data)
+            trData = data.to(device)
         return trData
 
     def getNumParams(self, params):
@@ -284,16 +274,22 @@ def main():
     log4j = spark_session.sparkContext._jvm.org.apache.log4j
     log4j.LogManager.getRootLogger().setLevel(log4j.Level.ERROR)
 
+    users_ingested = fetch_from_cassandra(
+        'ga_epnau_features_raw', spark_session)
+
+    current_day_ids = users_ingested.select('client_id').where(
+        "day_of_data_capture = {}").format(PREDICTION_DAY_AS_STR)
+
     sessions = fetch_from_cassandra(
-        'ga_epna_data_sessions', spark_session)
+        'ga_epna_data_sessions', spark_session).join(current_day_ids, 'client_id', 'inner')
     hits = fetch_from_cassandra(
-        'ga_epna_data_hits', spark_session)
+        'ga_epna_data_hits', spark_session).join(current_day_ids, 'client_id', 'inner')
     users = fetch_from_cassandra(
-        'ga_epna_data_users', spark_session)
+        'ga_epna_data_users', spark_session).join(current_day_ids, 'client_id', 'inner')
     num_items = fetch_from_cassandra(
-        'ga_epna_data_num_hits', spark_session)
+        'ga_epna_data_num_hits', spark_session).join(current_day_ids, 'client_id', 'inner')
     shopping_stage = fetch_from_cassandra(
-        'ga_epna_data_shopping_stages', spark_session)
+        'ga_epna_data_shopping_stages', spark_session).join(current_day_ids, 'client_id', 'inner')
 
     model = ModelLSTM_V1(inputShape=(9, 12, 2), outputShape=6, hyperParameters={"randomizeSessionSize": True,
                                                                                 "appendPreviousOutput": True,
@@ -311,12 +307,12 @@ def main():
             lower_limit = 'GA' + str(segment_limit)
             upper_limit = 'GA' + str(segment_limit + 5)
 
-            condition_string = "session_count == {} and user_segment >= '{}' and user_segment < '{}'".format(
+            condition_string = "session_count = {} and user_segment >= '{}' and user_segment < '{}'".format(
                 session_count, lower_limit, upper_limit)
 
             if segment_limit == 90:
 
-                condition_string = "session_count == {} and user_segment >= 'GA90'".format(
+                condition_string = "session_count = {} and user_segment >= 'GA90'".format(
                     session_count)
 
             filtered_users_df = users.filter(condition_string)
@@ -328,7 +324,7 @@ def main():
                         select('client_id').
                         withColumn(
                             'index',
-                            f.row_number().over(Window.orderBy('client_id') - 1)
+                            f.row_number().over(Window.orderBy('client_id')) - 1
                         )
                         )
 
@@ -391,6 +387,7 @@ def main():
              options(**save_options_ga_epna_predictions).
              save()
              )
+
 
 if __name__ == '__main__':
     main()

@@ -296,7 +296,7 @@ def main():
     ))
 
     save_filtered_data(
-        filtered_data_dfs['user'], filtered_data_dfs['session'], filtered_data_dfs['hit'])
+        filtered_data_dfs['user'], filtered_data_dfs['session'], filtered_data_dfs['hit'], filtered_data_dfs['shopping_stages'])
 
 
 if __name__ == '__main__':
