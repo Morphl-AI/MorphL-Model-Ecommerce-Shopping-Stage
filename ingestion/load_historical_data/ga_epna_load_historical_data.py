@@ -30,13 +30,14 @@ training_interval = display_options('training')
 predictions_interval = display_options('predictions')
 
 now = datetime.datetime.now()
+today = datetime.datetime(now.year, now.month, now.day, 0, 30, 0)
 
 # Display training & prediction windows dates
-date_to_p = now - datetime.timedelta(days=1)
+date_to_p = today - datetime.timedelta(days=1)
 date_from_p = date_to_p - \
     datetime.timedelta(days=predictions_interval-1)
 
-date_to_t = now - datetime.timedelta(days=predictions_interval + 1)
+date_to_t = today - datetime.timedelta(days=predictions_interval + 1)
 date_from_t = date_to_t - \
     datetime.timedelta(days=training_interval-1)
 
@@ -59,12 +60,11 @@ with open(argv[1], 'w') as fh1:
 with open(argv[2], 'w') as fh2:
     fh2.write(str(predictions_interval))
 
-# Set the ingestion date as py code
+# Set the ingestion pipeline start date as py code
 # @todo When the training pipeline is added, the following date should include the training window
 with open(argv[3], 'w') as fh3:
     fh3.write(date_from_p.__repr__())
 
-# Set the today's date as py code
-with open(argv[4], 'w') as fh3:
-    now = datetime.datetime.now()
-    fh3.write(now.__repr__())
+# Set the prediction pipeline start date as py code
+with open(argv[4], 'w') as fh4:
+    fh4.write(date_from_p.__repr__())

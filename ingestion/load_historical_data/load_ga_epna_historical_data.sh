@@ -30,15 +30,16 @@ if [ ${rc} -eq 0 ]; then
   # Create ingestion dag and trigger pipeline
   START_DATE_AS_PY_CODE=$(<${TEMPFILE_C})
   sed "s/START_DATE_AS_PY_CODE/${START_DATE_AS_PY_CODE}/g" /opt/ga_epna/ingestion/pipeline_setup/ga_epna_ingestion_airflow_dag.py.template > /home/airflow/airflow/dags/ga_epna_ingestion_pipeline.py
+  # airflow trigger_dag ga_epna_ingestion_pipeline
 
   # Create training dag and trigger pipeline
   # START_DATE_AS_PY_CODE=$(<${TEMPFILE_C})
   # sed "s/START_DATE_AS_PY_CODE/${START_DATE_AS_PY_CODE}/g;s/DAYS_TRAINING_INTERVAL/${DAYS_TRAINING_INTERVAL}/g;s/DAYS_PREDICTION_INTERVAL/${DAYS_PREDICTION_INTERVAL}/g" /opt/ga_epna/training/pipeline_setup/ga_epna_training_airflow_dag.py.template > /home/airflow/airflow/dags/ga_epna_training_pipeline.py
   # airflow trigger_dag ga_epna_training_pipeline
   
-  # Create prediction dag
-  # START_DATE_AS_PY_CODE=$(<${TEMPFILE_D})
-  # sed "s/START_DATE_AS_PY_CODE/${START_DATE_AS_PY_CODE}/g;s/DAYS_PREDICTION_INTERVAL/${DAYS_PREDICTION_INTERVAL}/g" /opt/ga_epna/prediction/pipeline_setup/ga_epna_prediction_airflow_dag.py.template > /home/airflow/airflow/dags/ga_epna_prediction_pipeline.py
+  # Create prediction dag, should be triggered after ingestion pipeline has finished running for the whole interval
+  START_DATE_AS_PY_CODE=$(<${TEMPFILE_D})
+  sed "s/START_DATE_AS_PY_CODE/${START_DATE_AS_PY_CODE}/g" /opt/ga_epna/prediction/pipeline_setup/ga_epna_prediction_airflow_dag.py.template > /home/airflow/airflow/dags/ga_epna_prediction_pipeline.py
   
   start_airflow.sh
   echo 'The data load has been initiated.'
