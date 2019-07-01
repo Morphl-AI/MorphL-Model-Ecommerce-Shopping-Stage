@@ -299,14 +299,16 @@ def main():
                                                                                 'inShape': (9, 12, 2),
                                                                                 "attributionModeling": "linear"})
     model.loadWeights('/opt/models/ga_epna_model_weights.pkl')
-
-    for session_count in range(1, 40):
-        segment_range = range(10, 95, 5) if session_count < 5 else range(10, 100, 10)
+    
+    max_session_count = users.agg({'session_count': 'max'}).collect()[0][0]
+   
+    for session_count in range(1, max_session_count + 1):
+        segment_range = range(10, 95, 5) if session_count < 5 else range(10, 100, 20)
         
         for segment_limit in segment_range:
             
             lower_limit = 'GA' + str(segment_limit)
-            upper_limit = 'GA' + str(segment_limit + 5) if session_count < 5 else str(segment_limit + 10)
+            upper_limit = 'GA' + str(segment_limit + 5) if session_count < 5 else str(segment_limit + 20)
 
             condition_string = "session_count = {} and user_segment >= '{}' and user_segment < '{}'".format(
                 session_count, lower_limit, upper_limit)
