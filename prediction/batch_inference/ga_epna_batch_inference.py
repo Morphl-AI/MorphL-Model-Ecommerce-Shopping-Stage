@@ -392,6 +392,7 @@ def main():
                 withColumn('index', to_int_udf('index')).
                 join(order_df, 'index', 'inner').
                 drop('index').
+                withColumn('prediction_date', f.lit(PREDICTION_DAY_AS_STR)).
                 repartition(32)
             )
 
