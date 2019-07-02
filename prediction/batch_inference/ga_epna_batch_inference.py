@@ -23,7 +23,7 @@ APPLICATION_NAME = 'batch-inference'
 
 device = tr.device("cuda") if tr.cuda.is_available() else tr.device("cpu")
 
-
+# Model class used for predictions.
 class ModelLSTM_V1(nn.Module):
     def __init__(self, inputShape, outputShape, hyperParameters={}, **kwargs):
         super().__init__(**kwargs)
@@ -275,10 +275,12 @@ def main():
 
     users_ingested = fetch_from_cassandra(
         'ga_epnau_features_raw', spark_session)
-
+    
+    # Get the ids of users from the current day of predictions.
     current_day_ids = users_ingested.select('client_id').where(
         "day_of_data_capture = '{}'".format(PREDICTION_DAY_AS_STR))
 
+    # Get all the data filtered by the client ids from the current day.
     sessions = fetch_from_cassandra(
         'ga_epna_data_sessions', spark_session).join(current_day_ids, 'client_id', 'inner')
     hits = fetch_from_cassandra(
@@ -290,6 +292,7 @@ def main():
     shopping_stage = fetch_from_cassandra(
         'ga_epna_data_shopping_stages', spark_session).join(current_day_ids, 'client_id', 'inner')
 
+    # Load the model.
     model = ModelLSTM_V1(inputShape=(9, 12, 2), outputShape=6, hyperParameters={"randomizeSessionSize": True,
                                                                                 "appendPreviousOutput": True,
                                                                                 "baseNeurons": 30,
@@ -297,15 +300,24 @@ def main():
                                                                                 'normalization': 'min_max',
                                                                                 'inShape': (9, 12, 2),
                                                                                 "attributionModeling": "linear"})
+    # Load the model weights.
     model.loadWeights('/opt/models/ga_epna_model_weights.pkl')
-
-    for session_count in range(1, 40):
-        segment_range = range(10, 95, 5) if session_count < 5 else range(10, 100, 10)
+    
+    # Get the max session count for the current day.
+    max_session_count = users.agg({'session_count': 'max'}).collect()[0][0]
+    
+    # Start a for loop through tall the session counts.
+    for session_count in range(1, max_session_count + 1):
+        # For the first 4 session count segments, we go take the data in smaller chunnks
+        # since most users are found in this range. For all other session counts, we can 
+        # take the data in larger chunks Ex: 'GA10' <=  user_segment < 'GA30' vs.
+        # 'GA10' <= user_segment < 'GA15'
+        segment_range = range(10, 95, 5) if session_count < 5 else range(10, 100, 20)
         
         for segment_limit in segment_range:
             
             lower_limit = 'GA' + str(segment_limit)
-            upper_limit = 'GA' + str(segment_limit + 5) if session_count < 5 else str(segment_limit + 10)
+            upper_limit = 'GA' + str(segment_limit + 5) if session_count < 5 else str(segment_limit + 20)
 
             condition_string = "session_count = {} and user_segment >= '{}' and user_segment < '{}'".format(
                 session_count, lower_limit, upper_limit)
@@ -317,9 +329,11 @@ def main():
 
             filtered_users_df = users.filter(condition_string)
 
+            # If there are no users with this session count, skip.
             if len(filtered_users_df.head(1)) == 0:
                 continue
-
+            
+            # Add an index to the the data ordered by client_id.
             order_df = (filtered_users_df.
                         select('client_id').
                         withColumn(
@@ -328,6 +342,7 @@ def main():
                         )
                         )
 
+            # Collect all the data as numpy arrays.
             users_array = np.array(filtered_users_df.orderBy('client_id').select(
                 'features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
 
@@ -343,17 +358,22 @@ def main():
             shopping_stage_array = np.array(shopping_stage.filter(condition_string).orderBy(
                 'client_id').select('shopping_stages').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
 
+            # Get the results from the model.
             result = model.npForward({"dataSessions": sessions_array,
                                       "dataHits": hits_array,
                                       "dataUsers": users_array,
                                       "dataNumItems": num_items_array,
                                       "dataShoppingStage": shopping_stage_array})
-
+            # The results contain predictions for al sessions, we only want to keep 
+            # the last one.
             result = np.delete(
                 result, np.s_[:session_count - 1], axis=1).reshape(result.shape[0], 6)
 
+            # Converts the float 'index' to int.
             to_int_udf = f.udf(lambda x: int(x), 'int')
-
+            
+            # Use zipWithIndex so that we keep the order of the results while entering them
+            # into a df.
             result_df = (
                 spark_session.
                 sparkContext.

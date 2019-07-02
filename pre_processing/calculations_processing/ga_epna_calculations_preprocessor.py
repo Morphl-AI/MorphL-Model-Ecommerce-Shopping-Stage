@@ -43,17 +43,17 @@ def get_spark_session():
 
 def calculate_browser_device_features(users_df, sessions_df):
 
-    # Merge sessions and users dataframes
+    # Merge sessions and users dataframes.
     users_sessions_df = (users_df
                          .join(
                              sessions_df,
                              'client_id',
                              'inner'))
 
-    # Cache df since it will be used to later
+    # Cache df since it will be used to later.
     users_sessions_df.cache()
 
-    # Aggregate transactions and revenue by mobile device branding
+    # Aggregate transactions and revenue by mobile device branding.
     transactions_by_device_df = (users_sessions_df
                                  .groupBy('mobile_device_branding')
                                  .agg(
@@ -65,7 +65,7 @@ def calculate_browser_device_features(users_df, sessions_df):
                                          'client_id').alias('users')
                                  ))
 
-    # Calculate device revenue per transaction column
+    # Calculate device revenue per transaction and device transactions per user columns.
     transactions_by_device_df = (transactions_by_device_df
                                  .withColumn(
                                      'device_revenue_per_transaction',
@@ -79,7 +79,7 @@ def calculate_browser_device_features(users_df, sessions_df):
                                  .drop('transactions', 'transaction_revenue')
                                  )
 
-    # Aggregate transactions and revenue by browser
+    # Aggregate transactions and revenue by browser.
     transactions_by_browser_df = (users_sessions_df
                                   .groupBy('browser')
                                   .agg(
@@ -91,7 +91,7 @@ def calculate_browser_device_features(users_df, sessions_df):
                                           'client_id').alias('users')
                                   ))
 
-    # Calculate browser revenue per transaction column
+    # Calculate browser revenue per transaction and browser transactions per user columns.
     transactions_by_browser_df = (transactions_by_browser_df
                                   .withColumn(
                                       'browser_revenue_per_transaction',
@@ -119,7 +119,7 @@ def calculate_browser_device_features(users_df, sessions_df):
             ).repartition(32)
 
 
-# Udf function used to pad the session arrays with hits of zero value
+# Udf function used to pad the session arrays with hits of zero value.
 def pad_with_zero(features, max_hit_count):
 
     for session_count in range(len(features)):
@@ -128,6 +128,8 @@ def pad_with_zero(features, max_hit_count):
             (max_hit_count - len(features[session_count]))
 
     return features
+
+# Sets values outside of [0.0, 1.0] to 0.0 or 1.0.
 
 
 def clip(value):
@@ -139,7 +141,10 @@ def clip(value):
     return value
 
 
+# Normalizes hit data.
 def min_max_hits(hit_features):
+    # Max and min used when training for each feature
+    # ['time_on_page', 'product_detail_views']
     min = [0.0, 0.0]
     max = [1225.0, 1.0]
 
@@ -148,8 +153,14 @@ def min_max_hits(hit_features):
 
     return hit_features
 
+# Normalizes session data.
+
 
 def min_max_sessions(session_features):
+    # Max and min used when training for each feature.
+    # ['session_duration', 'unique_pageviews', 'transactions', 'revenue', 'unique_purchases', 'days_since_last_session',
+    #   'search_result_views', 'search_uniques', 'search_depth', 'search_refinements'
+    # ]
     min = [10.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     max = [10488.0, 103.0, 1.0, 2268.0, 3.0, 144.0, 39.0, 18.0, 109.0, 21.0]
 
@@ -159,8 +170,14 @@ def min_max_sessions(session_features):
 
     return session_features
 
+# Normalizes user data.
+
 
 def min_max_users(users_features):
+    # Max and min values used when training for each feature.
+    # ['device_transactions_per_user', 'device_revenue_per_transactions', 'browser_transactions_per_user', 'browser_revenue_per_transaction'
+    #  'new_visitor', 'returning_visitor', 'is_desktop', 'is_mobile', 'is_tablet'
+    # ]
     min = [0.0005, 839.268, 0.015, 1079.162]
     max = [0.024, 2063.59, 0.029, 3277.434]
 
@@ -169,6 +186,8 @@ def min_max_users(users_features):
             (users_features[i] - min[i]) / (max[i] - min[i]))
 
     return users_features
+
+# Save array data to Cassandra.
 
 
 def save_data(hits_data, hits_num_data, session_data, user_data, shopping_stages_data):
@@ -285,15 +304,27 @@ def main():
 
     session_counts.cache()
 
+    # Initialize udfs
     min_maxer_hits = f.udf(min_max_hits, ArrayType(DoubleType()))
     min_maxer_sessions = f.udf(min_max_sessions, ArrayType(DoubleType()))
     min_maxer_users = f.udf(min_max_users, ArrayType(DoubleType()))
-
-    # Initialize udf
     zero_padder = f.udf(pad_with_zero, ArrayType(
         ArrayType(ArrayType(DoubleType()))))
 
-    # Get the hit zero padded arrays
+    # Initialize windows used for future grouping of data while keeping order.
+    hits_window_by_sessions = Window.partitionBy(
+        'session_id').orderBy('date_hour_minute')
+    hits_window_by_user = Window.partitionBy('client_id').orderBy('session_id')
+
+    # Grab the hit features into an array column 'hits_features',
+    # apply the normalizer to that column,
+    # collect the the hits_features arrays into a list over the window paritioned by session_id,
+    # group the data by session id and get the client_id and last collected list with all the data.
+    # collect all the session lists with hit lists inside over the window partitioned by client_id,
+    # group data by client id and get the client_id and last collected list.
+    # Add the session counts and hit counts then pad the hits with zero according to the max hit count 
+    # of users with that session count.
+    #
     # user[
     #     session[
     #         hit[1.0, 2.0, 3.0, 4.0],
@@ -304,11 +335,6 @@ def main():
     #         hit[0.0, 0.0, 0.0, 0.0]
     #     ]
     # ]
-
-    hits_window_by_sessions = Window.partitionBy(
-        'session_id').orderBy('date_hour_minute')
-    hits_window_by_user = Window.partitionBy('client_id').orderBy('session_id')
-
     ga_epna_data_hits = (ga_epnah_features_filtered_df
                          .select(
                              'client_id',
@@ -336,7 +362,9 @@ def main():
                          .repartition(32)
                          )
 
-    # Get session arrays
+    # Get session arrays. Similiar process to hits but data is collect at session level
+    # and we also one hot encode categorical data.
+    #
     # user[
     #     session[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
     #     session[13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0]
@@ -387,7 +415,7 @@ def main():
     user_types = ga_epnah_features_filtered_df.groupBy('client_id').agg(
         f.last('user_type').alias('user_type'))
 
-    # Get user arrays
+    # Get user arrays. Similar to sessions with data at user level.
     # user[1.0, 2.0, 3.0, 4.0, 5.0]
     ga_epna_data_users = (users_df.
                           join(user_types, 'client_id', 'inner').
