@@ -209,6 +209,7 @@ DROP TABLE IF EXISTS morphl.ga_epna_predictions;
 
 CREATE TABLE morphl.ga_epna_predictions(
   client_id text, 
+  prediction_date date,
   all_visits double, 
   product_view double, 
   add_to_cart double, 
@@ -232,6 +233,18 @@ CREATE TABLE morphl.ga_epna_predictions_access_logs (
   PRIMARY KEY ((client_id), tstamp)
 ) WITH CLUSTERING ORDER BY (tstamp DESC);
 
+DROP TABLE IF EXISTS morphl.ga_epna_statistics;
+
+CREATE TABLE morphl.ga_epna_statistics(
+  prediction_date date,
+  all_visits int, 
+  product_view int, 
+  add_to_cart int, 
+  checkout_with_add_to_cart int, 
+  checkout_without_add_to_cart int, 
+  transaction int,
+  PRIMARY KEY((prediction_date))
+);
 DROP TABLE IF EXISTS morphl.ga_epna_config_parameters;
 
 CREATE TABLE morphl.ga_epna_config_parameters (
