@@ -4,6 +4,9 @@ import numpy as np
 from pyspark.sql import SparkSession
 from pyspark.sql import Window, functions as f
 
+from cassandra.cluster import Cluster
+from cassandra.auth import PlainTextAuthProvider
+
 import numpy as np
 import torch as tr
 import torch.nn.functional as F
@@ -15,6 +18,8 @@ MORPHL_CASSANDRA_USERNAME = getenv('MORPHL_CASSANDRA_USERNAME')
 MORPHL_CASSANDRA_PASSWORD = getenv('MORPHL_CASSANDRA_PASSWORD')
 MORPHL_CASSANDRA_KEYSPACE = getenv('MORPHL_CASSANDRA_KEYSPACE')
 
+CASS_REQ_TIMEOUT = 3600.0
+
 PREDICTION_DAY_AS_STR = getenv('PREDICTION_DAY_AS_STR')
 
 MASTER_URL = 'local[*]'
@@ -24,6 +29,8 @@ APPLICATION_NAME = 'batch-inference'
 device = tr.device("cuda") if tr.cuda.is_available() else tr.device("cpu")
 
 # Model class used for predictions.
+
+
 class ModelLSTM_V1(nn.Module):
     def __init__(self, inputShape, outputShape, hyperParameters={}, **kwargs):
         super().__init__(**kwargs)
@@ -258,6 +265,41 @@ def fetch_from_cassandra(c_table_name, spark_session):
     return df
 
 
+def insert_statistics(statistics):
+    auth_provider = PlainTextAuthProvider(
+        username=MORPHL_CASSANDRA_USERNAME,
+        password=MORPHL_CASSANDRA_PASSWORD
+    )
+    
+    cluster = Cluster(
+        [MORPHL_SERVER_IP_ADDRESS], auth_provider=auth_provider)
+    
+    spark_session_cass = cluster.connect(MORPHL_CASSANDRA_KEYSPACE)
+    
+    insert_sql_parts = [
+        'INSERT INTO ga_epna_predictions_statistics ',
+        '(prediction_date, total_predictions, all_visits, product_view, checkout_with_add_to_cart,', 
+        'transaction, add_to_cart, checkout_without_add_to_cart)'
+        'VALUES (?,?,?,?,?,?,?,?)',
+    ]
+    
+    insert_sql = ' '.join(insert_sql_parts)
+    
+    prep_stmt_statistics = spark_session_cass.prepare(insert_sql)
+    
+    bind_list = [
+        PREDICTION_DAY_AS_STR,
+        statistics['total_predictions'],
+        statistics['all_visits'],
+        statistics['product_view'],
+        statistics['checkout_with_add_to_cart'],
+        statistics['transaction'],
+        statistics['add_to_cart'],
+        statistics['checkout_without_add_to_cart']
+    ]
+    
+    spark_session_cass.execute(prep_stmt_statistics, bind_list, timeout=CASS_REQ_TIMEOUT)
+
 def main():
     spark_session = (
         SparkSession.builder
@@ -275,7 +317,7 @@ def main():
 
     users_ingested = fetch_from_cassandra(
         'ga_epnau_features_raw', spark_session)
-    
+
     # Get the ids of users from the current day of predictions.
     current_day_ids = users_ingested.select('client_id').where(
         "day_of_data_capture = '{}'".format(PREDICTION_DAY_AS_STR))
@@ -302,22 +344,34 @@ def main():
                                                                                 "attributionModeling": "linear"})
     # Load the model weights.
     model.loadWeights('/opt/models/ga_epna_model_weights.pkl')
-    
+
     # Get the max session count for the current day.
     max_session_count = users.agg({'session_count': 'max'}).collect()[0][0]
-    
+
+    statistics = {
+        'add_to_cart': 0,
+        'all_visits': 0,
+        'checkout_with_add_to_cart': 0,
+        'checkout_without_add_to_cart': 0,
+        'product_view': 0,
+        'transaction': 0,
+        'total_predictions': 0
+    }
+
     # Start a for loop through tall the session counts.
     for session_count in range(1, max_session_count + 1):
         # For the first 4 session count segments, we go take the data in smaller chunnks
-        # since most users are found in this range. For all other session counts, we can 
+        # since most users are found in this range. For all other session counts, we can
         # take the data in larger chunks Ex: 'GA10' <=  user_segment < 'GA30' vs.
         # 'GA10' <= user_segment < 'GA15'
-        segment_range = range(10, 95, 5) if session_count < 5 else range(10, 100, 20)
-        
+        segment_range = range(
+            10, 95, 5) if session_count < 5 else range(10, 100, 20)
+
         for segment_limit in segment_range:
-            
+
             lower_limit = 'GA' + str(segment_limit)
-            upper_limit = 'GA' + str(segment_limit + 5) if session_count < 5 else str(segment_limit + 20)
+            upper_limit = 'GA' + \
+                str(segment_limit + 5) if session_count < 5 else str(segment_limit + 20)
 
             condition_string = "session_count = {} and user_segment >= '{}' and user_segment < '{}'".format(
                 session_count, lower_limit, upper_limit)
@@ -332,7 +386,7 @@ def main():
             # If there are no users with this session count, skip.
             if len(filtered_users_df.head(1)) == 0:
                 continue
-            
+
             # Add an index to the the data ordered by client_id.
             order_df = (filtered_users_df.
                         select('client_id').
@@ -364,14 +418,14 @@ def main():
                                       "dataUsers": users_array,
                                       "dataNumItems": num_items_array,
                                       "dataShoppingStage": shopping_stage_array})
-            # The results contain predictions for al sessions, we only want to keep 
+            # The results contain predictions for al sessions, we only want to keep
             # the last one.
             result = np.delete(
                 result, np.s_[:session_count - 1], axis=1).reshape(result.shape[0], 6)
 
             # Converts the float 'index' to int.
             to_int_udf = f.udf(lambda x: int(x), 'int')
-            
+
             # Use zipWithIndex so that we keep the order of the results while entering them
             # into a df.
             result_df = (
@@ -396,6 +450,12 @@ def main():
                 repartition(32)
             )
 
+            for stage, count in statistics.items():
+                if stage == 'total_predictions':
+                    statistics[stage] = count + result_df.count()
+                else:
+                    statistics[stage] = count + result_df.where("{} > 0.5".format(stage)).count()
+
             save_options_ga_epna_predictions = {
                 'keyspace': MORPHL_CASSANDRA_KEYSPACE,
                 'table': ('ga_epna_predictions')
@@ -408,6 +468,8 @@ def main():
              options(**save_options_ga_epna_predictions).
              save()
              )
+
+            insert_statistics(statistics)
 
 
 if __name__ == '__main__':

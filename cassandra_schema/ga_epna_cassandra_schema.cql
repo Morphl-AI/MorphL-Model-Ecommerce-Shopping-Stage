@@ -235,8 +235,9 @@ CREATE TABLE morphl.ga_epna_predictions_access_logs (
 
 DROP TABLE IF EXISTS morphl.ga_epna_statistics;
 
-CREATE TABLE morphl.ga_epna_statistics(
+CREATE TABLE morphl.ga_epna_predictions_statistics(
   prediction_date date,
+  total_predictions int,
   all_visits int, 
   product_view int, 
   add_to_cart int, 
