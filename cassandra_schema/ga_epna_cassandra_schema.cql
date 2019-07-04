@@ -233,7 +233,7 @@ CREATE TABLE morphl.ga_epna_predictions_access_logs (
   PRIMARY KEY ((client_id), tstamp)
 ) WITH CLUSTERING ORDER BY (tstamp DESC);
 
-DROP TABLE IF EXISTS morphl.ga_epna_statistics;
+DROP TABLE IF EXISTS morphl.ga_epna_predictions_statistics;
 
 CREATE TABLE morphl.ga_epna_predictions_statistics(
   prediction_date date,
