@@ -95,7 +95,6 @@ CREATE TABLE morphl.ga_epnau_features_raw (
     device_category text,
     browser text,
     sessions double, 
-    bounces double, 
     revenue_per_user double,
     transactions_per_user double,
     PRIMARY KEY ((client_id), day_of_data_capture)
@@ -107,7 +106,6 @@ CREATE TABLE morphl.ga_epnas_features_raw (
   client_id text,
   day_of_data_capture date,
   session_id text, 
-  search_used text,
   days_since_last_session double,
   session_duration double, 
   unique_page_views double,
