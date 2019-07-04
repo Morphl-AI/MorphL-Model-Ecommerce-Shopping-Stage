@@ -52,6 +52,44 @@ CREATE TABLE morphl.ga_epna_hits (
   PRIMARY KEY ((client_id), day_of_data_capture, session_id, hit_id)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
+DROP TABLE IF EXISTS morphl.ga_epna_product_info
+
+CREATE TABLE morphl.ga_epna_product_info (
+  client_id text,
+  day_of_data_capture date, 
+  session_id text, 
+  product_name text, 
+  date_hour_minute text, 
+  json_meta text, 
+  json_data text,
+  PRIMARY KEY ((client_id), day_of_data_capture, session_id, product_name)
+) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
+
+DROP TABLE IF EXISTS morphl.ga_epna_event_info
+
+CREATE TABLE morphl.ga_epna_event_info (
+  client_id text,
+  day_of_data_capture date,
+  session_id text,
+  event_action text,
+  event category text,
+  date_hour_minute text,
+  json_meta text,
+  json_data text,
+  PRIMARY KEY((client_id), day_of_data_capture, session_id, event_action, event_category, date_hour_minute)
+) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
+
+DROP TABLE IF EXISTS morphl.ga_epna_session_count
+
+CREATE TABLE morphl.session_count (
+  client_id text,
+  day_of_data_capture date,
+  session_id text,
+  json_meta text,
+  json_data text,
+  PRIMARY KEY((client_id), day_of_data_capture, session_id)
+)
+
 DROP TABLE IF EXISTS morphl.ga_epnau_features_raw;
 
 CREATE TABLE morphl.ga_epnau_features_raw (
