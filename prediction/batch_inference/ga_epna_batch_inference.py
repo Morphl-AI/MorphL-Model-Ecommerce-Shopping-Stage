@@ -371,7 +371,7 @@ def main():
 
             lower_limit = 'GA' + str(segment_limit)
             upper_limit = 'GA' + \
-                str(segment_limit + 5) if session_count < 5 else str(segment_limit + 20)
+                str(segment_limit + 5) if session_count < 5 else 'GA' + str(segment_limit + 20) 
 
             condition_string = "session_count = {} and user_segment >= '{}' and user_segment < '{}'".format(
                 session_count, lower_limit, upper_limit)
