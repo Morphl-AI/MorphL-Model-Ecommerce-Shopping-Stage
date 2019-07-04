@@ -65,17 +65,17 @@ CREATE TABLE morphl.ga_epna_product_info (
   PRIMARY KEY ((client_id), day_of_data_capture, session_id, product_name)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
-DROP TABLE IF EXISTS morphl.ga_epna_event_info;
+-- DROP TABLE IF EXISTS morphl.ga_epna_event_info;
 
-CREATE TABLE morphl.ga_epna_event_info (
-  client_id text,
-  day_of_data_capture date,
-  session_id text,
-  event_action text,
-  event_category text,
-  date_hour_minute text,
-  PRIMARY KEY((client_id), day_of_data_capture, session_id, event_action, event_category, date_hour_minute)
-) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
+-- CREATE TABLE morphl.ga_epna_event_info (
+--   client_id text,
+--   day_of_data_capture date,
+--   session_id text,
+--   event_action text,
+--   event_category text,
+--   date_hour_minute text,
+--   PRIMARY KEY((client_id), day_of_data_capture, session_id, event_action, event_category, date_hour_minute)
+-- ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
 DROP TABLE IF EXISTS morphl.ga_epna_session_index;
 

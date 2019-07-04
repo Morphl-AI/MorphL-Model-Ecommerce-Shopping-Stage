@@ -41,7 +41,7 @@ class CassandraPersistence:
         type_4_list = ['sessions_shopping_stages']
         type_5_list = ['hits']
         type_6_list = ['product_info']
-        type_7_list = ['event_info']
+        # type_7_list = ['event_info']
         type_8_list = ['session_index']
 
         template_for_type_1 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,json_meta,json_data) VALUES (?,?,?,?)'
@@ -50,7 +50,7 @@ class CassandraPersistence:
         template_for_type_4 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,shopping_stage) VALUES (?,?,?,?)'
         template_for_type_5 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,date_hour_minute,json_meta,json_data) VALUES (?,?,?,?,?,?)'
         template_for_type_6 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,product_name,date_hour_minute,json_meta,json_data) VALUES (?,?,?,?,?,?,?)'
-        template_for_type_7 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,event_action,event_category,date_hour_minute) VALUES (?,?,?,?,?,?)'
+        # template_for_type_7 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,event_action,event_category,date_hour_minute) VALUES (?,?,?,?,?,?)'
         template_for_type_8 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,session_index) VALUES (?,?,?,?)'
 
         for report_type in type_1_list:
@@ -71,9 +71,9 @@ class CassandraPersistence:
         for report_type in type_6_list:
             self.prep_stmts[report_type] = self.session.prepare(
                 template_for_type_6.format(report_type))
-        for report_type in type_7_list:
-            self.prep_stmts[report_type] = self.session.prepare(
-                template_for_type_7.format(report_type))
+        # for report_type in type_7_list:
+        #     self.prep_stmts[report_type] = self.session.prepare(
+        #         template_for_type_7.format(report_type))
         for report_type in type_8_list:
             self.prep_stmts[report_type] = self.session.prepare(
                 template_for_type_8.format(report_type))
@@ -84,7 +84,7 @@ class CassandraPersistence:
         self.type_4_set = set(type_4_list)
         self.type_5_set = set(type_5_list)
         self.type_6_set = set(type_6_list)
-        self.type_7_set = set(type_7_list)
+        # self.type_7_set = set(type_7_list)
         self.type_8_set = set(type_8_list)
 
     def persist_dict_record(self, report_type, meta_dict, data_dict):
@@ -175,25 +175,25 @@ class CassandraPersistence:
                     'date_hour_minute': date_hour_minute
                     }
 
-        if report_type in self.type_7_set:
-            session_id = data_dict['dimensions'][1] + '.' + \
-                str(client_id) + '.' + day_of_data_capture_timestamp
-            date_hour_minute = data_dict['dimensions'][2]
-            event_action = data_dict['dimensions'][3]
-            event_category = data_dict['dimensions'][4]
+        # if report_type in self.type_7_set:
+        #     session_id = data_dict['dimensions'][1] + '.' + \
+        #         str(client_id) + '.' + day_of_data_capture_timestamp
+        #     date_hour_minute = data_dict['dimensions'][2]
+        #     event_action = data_dict['dimensions'][3]
+        #     event_category = data_dict['dimensions'][4]
 
-            bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
-                         session_id, event_action, event_category, date_hour_minute]
+        #     bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
+        #                  session_id, event_action, event_category, date_hour_minute]
 
-            return {'cassandra_future': self.session.execute_async(self.prep_stmts[report_type],
-                                                                   bind_list,
-                                                                   timeout=self.CASS_REQ_TIMEOUT),
-                    'client_id': client_id,
-                    'session_id': session_id,
-                    'event_action': event_action,
-                    'event_category': event_category,
-                    'date_hour_minute': date_hour_minute
-                    }
+        #     return {'cassandra_future': self.session.execute_async(self.prep_stmts[report_type],
+        #                                                            bind_list,
+        #                                                            timeout=self.CASS_REQ_TIMEOUT),
+        #             'client_id': client_id,
+        #             'session_id': session_id,
+        #             'event_action': event_action,
+        #             'event_category': event_category,
+        #             'date_hour_minute': date_hour_minute
+        #             }
 
         if report_type in self.type_8_set:
             session_id = data_dict['dimensions'][1] + '.' + \
@@ -400,19 +400,19 @@ class GoogleAnalytics:
         
         return self.run_report_and_store('product_info', dimensions, metrics, user_segment)
 
-    def store_event_info(self, user_segment):
-        dimensions = [
-            'dimension8',
-            'dimension2',
-            'dateHourMinute',
-            'eventAction',
-            'eventCategory'
-        ]
+    # def store_event_info(self, user_segment):
+    #     dimensions = [
+    #         'dimension8',
+    #         'dimension2',
+    #         'dateHourMinute',
+    #         'eventAction',
+    #         'eventCategory'
+    #     ]
 
         
-        metrics = ['sessionDuration']
+    #     metrics = ['sessionDuration']
         
-        return self.run_report_and_store('event_info', dimensions, metrics, user_segment)
+    #     return self.run_report_and_store('event_info', dimensions, metrics, user_segment)
 
     def store_session_index(self, user_segment):
         dimensions = ['dimension8', 'dimension2', 'sessionCount']
@@ -441,8 +441,8 @@ class GoogleAnalytics:
             self.store_hits(user_segment)
             sleep(1)
             self.store_product_info(user_segment)
-            sleep(1)
-            self.store_event_info(user_segment)
+            # sleep(1)
+            # self.store_event_info(user_segment)
             sleep(1)
             self.store_session_index(user_segment)
 
