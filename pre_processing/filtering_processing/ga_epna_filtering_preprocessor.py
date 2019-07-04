@@ -58,7 +58,7 @@ def fetch_from_cassandra(c_table_name, spark_session):
     return df
 
 
-# Formats the stages column so that 
+# Formats the stages column so that
 # we keep relevant stages and give them a standard format for one hot encoding.
 def format_and_filter_shopping_stages(stages):
 
@@ -87,8 +87,14 @@ def format_and_filter_shopping_stages(stages):
 
 # Filters the data and makes sure that the client_ids we make predictions on
 # have data in all relevant tables.
-def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits_df):
+def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits_df, product_info_df, session_index_df):
 
+    hits_df = hits_df.join(product_info_df.drop('product_name'), [
+                           'client_id', 'session_id', 'date_hour_minute'], 'left_outer').repartition(32)
+
+    user_session_counts = session_index_df.groupBy('client_id').agg(f.max('session_index'))
+
+    users_df = users_df.join(user_session_counts, 'client_id', 'inner').repartition(32)
 
     # Get the session ids that are present in all tables.
     sessions_df_session_ids = sessions_df.select('session_id').distinct()
@@ -104,7 +110,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                                 shopping_stages_df_session_ids
                             )
                             )
-    
+
     # Will be reused multiple times so caching will improve performance.
     complete_session_ids.cache()
 
@@ -114,7 +120,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                                           join(complete_session_ids,
                                                'session_id', 'inner')
                                           )
-    
+
     # Only keep hits that we have hopping stage and session data for.
     hits_filtered_by_session_id_df = (hits_df.
                                       drop('day_of_data_capture').
@@ -128,7 +134,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                                                  join(complete_session_ids,
                                                       'session_id', 'inner')
                                                  )
-    
+
     # Get all the ids that have the required shopping stages.
     client_ids_with_stages = (shopping_stages_filtered_by_session_id_df.
                               select('client_id')
@@ -139,7 +145,8 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
     client_ids_users = users_df.select('client_id').distinct()
     client_ids_sessions = sessions_filtered_by_session_id_df.select(
         'client_id').distinct()
-    client_ids_hits = hits_filtered_by_session_id_df.select('client_id').distinct()
+    client_ids_hits = hits_filtered_by_session_id_df.select(
+        'client_id').distinct()
 
     # Get client_ids that exist in all dfs.
     complete_client_ids = (client_ids_users
@@ -165,7 +172,6 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
 
     filtered_users_df.repartition(32)
 
-  
     filtered_mobile_brand_df = (mobile_brand_df.
                                 drop('day_of_data_capture', 'sessions').
                                 join(complete_client_ids,
@@ -200,7 +206,6 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                                f.first('device_category').alias(
                                    'device_category'),
                                f.first('browser').alias('browser'),
-                               f.sum('bounces').alias('bounces'),
                                f.sum('sessions').alias('sessions'),
                                f.sum('revenue_per_user').alias(
                                    'revenue_per_user'),
@@ -337,13 +342,21 @@ def main():
     shopping_stages_df = fetch_from_cassandra(
         'ga_epna_sessions_shopping_stages', spark_session)
 
+    ga_epnap_features_raw = fetch_from_cassandra(
+        'ga_epnap_features_raw', spark_session)
+
+    session_index_df = fetch_from_cassandra(
+        'ga_epna_session_index', spark_session)
+
     # Get all the filtered dfs.
     filtered_data_dfs = (filter_data(
         ga_epnau_features_raw_df,
         mobile_brand_df,
         ga_epnas_features_filtered_df,
         shopping_stages_df,
-        ga_epnah_features_raw
+        ga_epnah_features_raw,
+        ga_epnap_features_raw,
+        session_index_df
     ))
 
     save_filtered_data(
