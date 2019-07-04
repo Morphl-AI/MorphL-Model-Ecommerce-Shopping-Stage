@@ -390,11 +390,8 @@ class GoogleAnalytics:
         
         metrics = [
             'quantityAddedToCart', 
-            'quantityCheckedOut',
-            'quantityRemovedFromCart',
             'productAddsToCart',
             'productCheckouts',
-            'productRemovesFromCart',
             'itemQuantity',
             'itemRevenue',
             'productDetailViews',

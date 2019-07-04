@@ -126,11 +126,28 @@ CREATE TABLE morphl.ga_epnah_features_raw (
   day_of_data_capture date,
   session_id text,
   user_type text,
-  hit_id text, 
   date_hour_minute text,
   time_on_page double,
   product_detail_views double,
-  PRIMARY KEY ((client_id), day_of_data_capture, session_id, hit_id)
+  PRIMARY KEY ((client_id), day_of_data_capture, session_id, date_hour_minute)
+) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
+
+DROP TABLE IF EXISTS morphl.ga_epnap_features_raw;
+
+CREATE TABLE morphl.ga_epnap_features_raw (
+  client_id text, 
+  day_of_data_capture date,
+  session_id text, 
+  date_hour_minute text,
+  product_name text, 
+  quantity_added_to_cart double, 
+  product_adds_to_cart double,
+  product_checkouts double, 
+  item_quantity double,
+  item_revenue double, 
+  product_detail_views double, 
+  cart_to_detail_rate double,
+  PRIMARY KEY ((client_id), day_of_data_capture, session_id, date_hour_minute, product_name )
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
 DROP TABLE IF EXISTS morphl.ga_epnau_features_filtered;
@@ -171,12 +188,11 @@ DROP TABLE IF EXISTS morphl.ga_epnah_features_filtered;
 CREATE TABLE morphl.ga_epnah_features_filtered (
   client_id text,
   session_id text,
-  hit_id text, 
   date_hour_minute text,
   user_type text,
   time_on_page double,
   product_detail_views double,
-  PRIMARY KEY ((client_id),session_id, hit_id)
+  PRIMARY KEY ((client_id),session_id, date_hour_minute)
 );
 
 DROP TABLE IF EXISTS morphl.ga_epna_shopping_stages_filtered;
