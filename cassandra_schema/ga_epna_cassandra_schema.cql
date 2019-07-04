@@ -74,19 +74,16 @@ CREATE TABLE morphl.ga_epna_event_info (
   event_action text,
   event_category text,
   date_hour_minute text,
-  json_meta text,
-  json_data text,
   PRIMARY KEY((client_id), day_of_data_capture, session_id, event_action, event_category, date_hour_minute)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
-DROP TABLE IF EXISTS morphl.ga_epna_session_count;
+DROP TABLE IF EXISTS morphl.ga_epna_session_index;
 
-CREATE TABLE morphl.ga_epna_session_count (
+CREATE TABLE morphl.ga_epna_session_index (
   client_id text,
   day_of_data_capture date,
   session_id text,
-  json_meta text,
-  json_data text,
+  session_index int, 
   PRIMARY KEY((client_id), day_of_data_capture, session_id)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 

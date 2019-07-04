@@ -42,7 +42,7 @@ class CassandraPersistence:
         type_5_list = ['hits']
         type_6_list = ['product_info']
         type_7_list = ['event_info']
-        type_8_list = ['session_count']
+        type_8_list = ['session_index']
 
         template_for_type_1 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,json_meta,json_data) VALUES (?,?,?,?)'
         template_for_type_2 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,mobile_device_branding) VALUES (?,?,?)'
@@ -50,8 +50,8 @@ class CassandraPersistence:
         template_for_type_4 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,shopping_stage) VALUES (?,?,?,?)'
         template_for_type_5 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,date_hour_minute,json_meta,json_data) VALUES (?,?,?,?,?,?)'
         template_for_type_6 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,product_name,date_hour_minute,json_meta,json_data) VALUES (?,?,?,?,?,?,?)'
-        template_for_type_7 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,event_action,event_category,date_hour_minute, json_meta, json_data) VALUES (?,?,?,?,?,?,?,?)'
-        template_for_type_8 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,json_meta,json_data) VALUES (?,?,?,?,?)'
+        template_for_type_7 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,event_action,event_category,date_hour_minute) VALUES (?,?,?,?,?,?)'
+        template_for_type_8 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,session_index) VALUES (?,?,?,?)'
 
         for report_type in type_1_list:
             self.prep_stmts[report_type] = self.session.prepare(
@@ -183,7 +183,7 @@ class CassandraPersistence:
             event_category = data_dict['dimensions'][4]
 
             bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
-                         session_id, event_action, event_category, date_hour_minute, json_meta, json_data]
+                         session_id, event_action, event_category, date_hour_minute]
 
             return {'cassandra_future': self.session.execute_async(self.prep_stmts[report_type],
                                                                    bind_list,
@@ -199,8 +199,10 @@ class CassandraPersistence:
             session_id = data_dict['dimensions'][1] + '.' + \
                 str(client_id) + '.' + day_of_data_capture_timestamp
 
+            session_index = int(data_dict['dimensions'][2])
+
             bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
-                         session_id, json_meta, json_data]
+                         session_id, session_index]
 
             return {'cassandra_future': self.session.execute_async(self.prep_stmts[report_type],
                                                                    bind_list,
@@ -416,12 +418,12 @@ class GoogleAnalytics:
         
         return self.run_report_and_store('event_info', dimensions, metrics, user_segment)
 
-    def store_session_count(self, user_segment):
+    def store_session_index(self, user_segment):
         dimensions = ['dimension8', 'dimension2', 'sessionCount']
         
         metrics = ['hits']
         
-        return self.run_report_and_store('session_count', dimensions, metrics, user_segment)
+        return self.run_report_and_store('session_index', dimensions, metrics, user_segment)
 
     def run(self):
         self.authenticate()
@@ -446,7 +448,7 @@ class GoogleAnalytics:
             sleep(1)
             self.store_event_info(user_segment)
             sleep(1)
-            self.store_session_count(user_segment)
+            self.store_session_index(user_segment)
 
 
 def main():
