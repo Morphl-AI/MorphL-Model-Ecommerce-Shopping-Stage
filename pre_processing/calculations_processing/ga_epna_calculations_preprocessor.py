@@ -145,10 +145,10 @@ def clip(value):
 def min_max_hits(hit_features):
     # Max and min used when training for each feature
     # ['time_on_page', 'product_detail_views']
-    min = [0.0, 0.0]
-    max = [1225.0, 1.0]
+    min = [0.0] * 8
+    max = [1451.0, 2.0, 100.0, 1.0, 482.0, 1.0, 1.0, 1.0]
 
-    for i in range(0, 2):
+    for i in range(0, 7):
         hit_features[i] = clip((hit_features[i] - min[i]) / (max[i] - min[i]))
 
     return hit_features
@@ -161,8 +161,8 @@ def min_max_sessions(session_features):
     # ['session_duration', 'unique_pageviews', 'transactions', 'revenue', 'unique_purchases', 'days_since_last_session',
     #   'search_result_views', 'search_uniques', 'search_depth', 'search_refinements'
     # ]
-    min = [10.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    max = [10488.0, 103.0, 1.0, 2268.0, 3.0, 144.0, 39.0, 18.0, 109.0, 21.0]
+    min = [8.0, 1.0,] + [0.0] * 8
+    max = [11196.0, 115.0, 1.0, 4477.0, 5.0, 149.0, 30.0, 22.0, 118.0, 25.0]
 
     for i in range(0, 10):
         session_features[i] = clip(
@@ -178,10 +178,10 @@ def min_max_users(users_features):
     # ['device_transactions_per_user', 'device_revenue_per_transactions', 'browser_transactions_per_user', 'browser_revenue_per_transaction'
     #  'new_visitor', 'returning_visitor', 'is_desktop', 'is_mobile', 'is_tablet'
     # ]
-    min = [0.0005, 839.268, 0.015, 1079.162]
-    max = [0.024, 2063.59, 0.029, 3277.434]
+    min = [1.0, 0.007, 225.0, 0.015, 1540.256]
+    max = [6305, 0.048, 2432.607, 0.061, 4209.32]
 
-    for i in range(0, 4):
+    for i in range(0, 5):
         users_features[i] = clip(
             (users_features[i] - min[i]) / (max[i] - min[i]))
 
@@ -281,7 +281,7 @@ def main():
                   .groupBy('session_id')
                   .agg(
                       f.first('client_id').alias('client_id'),
-                      f.count('hit_id').alias('hit_count')
+                      f.count('date_hour_minute').alias('hit_count')
                   )
                   .groupBy('client_id')
                   .agg(
@@ -342,7 +342,13 @@ def main():
                              'date_hour_minute',
                              f.array(
                                  f.col('time_on_page'),
-                                 f.col('product_detail_views')
+                                 f.col('product_detail_views'),
+                                 f.col('cart_to_detail_rate'),
+                                 f.col('item_quantity'),
+                                 f.col('item_revenue'),
+                                 f.col('product_adds_to_cart'),
+                                 f.col('product_checkouts'),
+                                 f.col('quantity_added_to_cart')
                              ).alias('hits_features')
                          ).
                          withColumn('hits_features', min_maxer_hits('hits_features')).
@@ -412,13 +418,9 @@ def main():
                              .repartition(32)
                              )
 
-    user_types = ga_epnah_features_filtered_df.groupBy('client_id').agg(
-        f.last('user_type').alias('user_type'))
-
     # Get user arrays. Similar to sessions with data at user level.
     # user[1.0, 2.0, 3.0, 4.0, 5.0]
     ga_epna_data_users = (users_df.
-                          join(user_types, 'client_id', 'inner').
                           withColumn(
                               'is_mobile', f.when(
                                   f.col('device_category') == 'desktop', 1.0).otherwise(0.0)
@@ -433,24 +435,25 @@ def main():
                           ).
                           withColumn(
                               'new_visitor', f.when(
-                                  f.col('user_type') == 'New Visitor', 1.0).otherwise(0.0)
+                                  f.col('session_count') == 1.0, 1.0).otherwise(0.0)
                           ).
                           withColumn(
                               'returning_visitor', f.when(
-                                  f.col('user_type') == 'Returning Visitor', 1.0).otherwise(0.0)
+                                  f.col('session_count') != 1.0, 1.0).otherwise(0.0)
                           ).
                           select(
                               'client_id',
                               f.array(
+                                  f.col('session_count'),
                                   f.col('device_transactions_per_user'),
                                   f.col('device_revenue_per_transaction'),
                                   f.col('browser_transactions_per_user'),
                                   f.col('browser_revenue_per_transaction'),
-                                  f.col('new_visitor'),
-                                  f.col('returning_visitor'),
                                   f.col('is_desktop'),
                                   f.col('is_mobile'),
                                   f.col('is_tablet'),
+                                  f.col('new_visitor'),
+                                  f.col('returning_visitor'),
                               ).alias('features')
                           )
                           .withColumn('features', min_maxer_users('features'))
@@ -496,12 +499,12 @@ def main():
                                         'client_id',
                                         'session_id',
                                         f.array(
-                                            f.col('shopping_stage_1'),
                                             f.col('shopping_stage_2'),
+                                            f.col('shopping_stage_1'),
                                             f.col('shopping_stage_3'),
+                                            f.col('shopping_stage_6'),
                                             f.col('shopping_stage_4'),
                                             f.col('shopping_stage_5'),
-                                            f.col('shopping_stage_6')
                                         ).alias('shopping_stage')
                                     ).
                                     withColumn('shopping_stage', f.collect_list('shopping_stage').over(stages_window_by_users)).
@@ -528,7 +531,7 @@ def main():
                              groupBy('session_id').
                              agg(
                                  f.first('client_id').alias('client_id'),
-                                 f.count('hit_id').alias('hits_count')
+                                 f.count('date_hour_minute').alias('hits_count')
                              ).
                              withColumn('sessions_hits_count', f.collect_list('hits_count').over(num_hits_window_by_user)).
                              groupBy('client_id').
