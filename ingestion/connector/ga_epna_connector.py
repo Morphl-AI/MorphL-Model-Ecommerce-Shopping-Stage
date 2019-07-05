@@ -341,7 +341,7 @@ class GoogleAnalytics:
 
     # Get session level data
     def store_sessions(self, user_segment):
-        dimensions = ['dimension8', 'dimension2', 'daysSinceLastSession']
+        dimensions = ['dimension8', 'dimension2', 'searchUsed', 'daysSinceLastSession']
         metrics = ['sessionDuration', 'uniquePageviews', 'transactions', 'transactionRevenue',
                    'uniquePurchases', 'searchResultViews', 'searchUniques', 'searchDepth', 'searchRefinements']
 

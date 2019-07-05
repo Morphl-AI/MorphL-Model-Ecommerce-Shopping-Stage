@@ -116,6 +116,7 @@ CREATE TABLE morphl.ga_epnas_features_raw (
   search_uniques double, 
   search_depth double,
   search_refinements double,
+  search_used text,
   PRIMARY KEY ((client_id), day_of_data_capture, session_id)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
@@ -177,6 +178,7 @@ CREATE TABLE morphl.ga_epnas_features_filtered (
   search_uniques double, 
   search_depth double,
   search_refinements double,
+  search_used text,
   PRIMARY KEY ((client_id), session_id)
 );
 
