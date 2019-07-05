@@ -335,12 +335,12 @@ def main():
         'ga_epna_data_shopping_stages', spark_session).join(current_day_ids, 'client_id', 'inner')
 
     # Load the model.
-    model = ModelLSTM_V1(inputShape=(9, 12, 2), outputShape=6, hyperParameters={"randomizeSessionSize": True,
+    model = ModelLSTM_V1(inputShape=(10, 12, 8), outputShape=6, hyperParameters={"randomizeSessionSize": True,
                                                                                 "appendPreviousOutput": True,
                                                                                 "baseNeurons": 30,
                                                                                 "outputType": "regression",
                                                                                 'normalization': 'min_max',
-                                                                                'inShape': (9, 12, 2),
+                                                                                'inShape': (10, 12, 8),
                                                                                 "attributionModeling": "linear"})
     # Load the model weights.
     model.loadWeights('/opt/models/ga_epna_model_weights.pkl')
