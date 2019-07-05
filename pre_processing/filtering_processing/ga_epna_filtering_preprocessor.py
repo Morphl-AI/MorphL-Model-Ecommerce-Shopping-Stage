@@ -89,12 +89,36 @@ def format_and_filter_shopping_stages(stages):
 # have data in all relevant tables.
 def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits_df, product_info_df, session_index_df):
 
-    hits_df = hits_df.join(product_info_df.drop('product_name'), [
-                           'client_id', 'session_id', 'date_hour_minute'], 'left_outer').repartition(32)
+    hits_df = (hits_df
+               .join(
+                   product_info_df.drop('product_name'),
+                   ['client_id',
+                    'session_id',
+                    'day_of_data_capture',
+                    'date_hour_minute'
+                    ],
+                   'left_outer'
+               )
+               .fillna(
+                   0.0,
+                   [
+                       'product_detail_views',
+                       'cart_to_detail_rate',
+                       'item_quantity',
+                       'item_revenue',
+                       'product_adds_to_cart',
+                       'product_checkouts',
+                       'quantity_added_to_cart'
+                   ]
+               )
+               .repartition(32)
+               )
 
-    user_session_counts = session_index_df.groupBy('client_id').agg(f.max('session_index'))
+    user_session_counts = session_index_df.groupBy(
+        'client_id').agg(f.max('session_index'))
 
-    users_df = users_df.join(user_session_counts, 'client_id', 'inner').repartition(32)
+    users_df = users_df.join(
+        user_session_counts, 'client_id', 'inner').repartition(32)
 
     # Get the session ids that are present in all tables.
     sessions_df_session_ids = sessions_df.select('session_id').distinct()
