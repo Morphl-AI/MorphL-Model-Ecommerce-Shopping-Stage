@@ -94,7 +94,6 @@ CREATE TABLE morphl.ga_epnau_features_raw (
     day_of_data_capture date,
     device_category text,
     browser text,
-    sessions double, 
     revenue_per_user double,
     transactions_per_user double,
     PRIMARY KEY ((client_id), day_of_data_capture)
@@ -155,7 +154,6 @@ CREATE TABLE morphl.ga_epnau_features_filtered (
     client_id text,
     device_category text,
     browser text,
-    sessions double, 
     session_count int,
     revenue_per_user double,
     transactions_per_user double,

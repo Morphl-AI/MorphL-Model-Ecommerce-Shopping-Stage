@@ -115,7 +115,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                )
 
     user_session_counts = session_index_df.groupBy(
-        'client_id').agg(f.max('session_index'))
+        'client_id').agg(f.max('session_index').alias('session_count'))
 
     users_df = users_df.join(
         user_session_counts, 'client_id', 'inner').repartition(32)
@@ -230,11 +230,11 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                                f.first('device_category').alias(
                                    'device_category'),
                                f.first('browser').alias('browser'),
-                               f.sum('sessions').alias('sessions'),
                                f.sum('revenue_per_user').alias(
                                    'revenue_per_user'),
                                f.sum('transactions_per_user').alias(
-                                   'transactions_per_user')
+                                   'transactions_per_user'),
+                               f.first('session_count').alias('session_count')
                            )
                            )
 
