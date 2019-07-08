@@ -192,64 +192,25 @@ def min_max_users(users_features):
 
 def save_data(hits_data, hits_num_data, session_data, user_data, shopping_stages_data):
 
-    save_options_ga_epna_data_hits = {
+
+    ga_epna_batch_inference_data = (hits_data
+                                    .join(hits_num_data, 'client_id', 'inner')
+                                    .join(session_data, 'client_id', 'inner')
+                                    .join(user_data, 'client_id', 'inner')
+                                    .join(shopping_stages_data, 'client_id', 'inner')
+                                    .repartition(32)          
+                                    )
+
+    save_options_ga_epna_batch_inference_data = {
         'keyspace': MORPHL_CASSANDRA_KEYSPACE,
-        'table': ('ga_epna_data_hits')
+        'table': ('ga_epna_batch_inference_data')
     }
 
-    save_options_ga_epna_data_num_hits = {
-        'keyspace': MORPHL_CASSANDRA_KEYSPACE,
-        'table': ('ga_epna_data_num_hits')
-    }
-
-    save_options_ga_epna_data_sessions = {
-        'keyspace': MORPHL_CASSANDRA_KEYSPACE,
-        'table': ('ga_epna_data_sessions')
-    }
-
-    save_options_ga_epna_data_user = {
-        'keyspace': MORPHL_CASSANDRA_KEYSPACE,
-        'table': ('ga_epna_data_users')
-    }
-
-    save_options_ga_epna_data_shopping_stages = {
-        'keyspace': MORPHL_CASSANDRA_KEYSPACE,
-        'table': ('ga_epna_data_shopping_stages')
-    }
-
-    (hits_data
+    (ga_epna_batch_inference_data
         .write
         .format('org.apache.spark.sql.cassandra')
         .mode('append')
-        .options(**save_options_ga_epna_data_hits)
-        .save())
-
-    (hits_num_data
-        .write
-        .format('org.apache.spark.sql.cassandra')
-        .mode('append')
-        .options(**save_options_ga_epna_data_num_hits)
-        .save())
-
-    (session_data
-        .write
-        .format('org.apache.spark.sql.cassandra')
-        .mode('append')
-        .options(**save_options_ga_epna_data_sessions)
-        .save())
-
-    (user_data
-        .write
-        .format('org.apache.spark.sql.cassandra')
-        .mode('append')
-        .options(**save_options_ga_epna_data_user)
-        .save())
-
-    (shopping_stages_data
-        .write
-        .format('org.apache.spark.sql.cassandra')
-        .mode('append')
-        .options(**save_options_ga_epna_data_shopping_stages)
+        .options(**save_options_ga_epna_batch_inference_data)
         .save())
 
 
@@ -360,10 +321,10 @@ def main():
                          withColumn('hits_features', f.collect_list(
                              'hits_features').over(hits_window_by_user))
                          .groupBy('client_id').agg(
-                             f.last('hits_features').alias('features')
+                             f.last('hits_features').alias('hits_features')
                          ).join(session_counts, 'client_id', 'inner')
                          .join(hit_counts, 'session_count', 'inner')
-                         .withColumn('features', zero_padder('features', 'max_hit_count'))
+                         .withColumn('hits_features', zero_padder('hits_features', 'max_hit_count'))
                          .drop('max_hit_count')
                          .repartition(32)
                          )
@@ -405,16 +366,13 @@ def main():
                                      f.col('search_refinements'),
                                      f.col('with_site_search'),
                                      f.col('without_site_search')
-                                 ).alias('session_features')
+                                 ).alias('sessions_features')
                              )
-                             .withColumn('session_features', min_maxer_sessions('session_features'))
-                             .withColumn('session_features', f.collect_list('session_features').over(sessions_window_by_user))
+                             .withColumn('sessions_features', min_maxer_sessions('sessions_features'))
+                             .withColumn('sessions_features', f.collect_list('sessions_features').over(sessions_window_by_user))
                              .groupBy('client_id')
-                             .agg(f.last('session_features').alias('features')
+                             .agg(f.last('sessions_features').alias('sessions_features')
                                   )
-                             .join(
-                                 session_counts, 'client_id', 'inner'
-                             )
                              .repartition(32)
                              )
 
@@ -454,12 +412,10 @@ def main():
                                   f.col('is_tablet'),
                                   f.col('new_visitor'),
                                   f.col('returning_visitor'),
-                              ).alias('features')
+                              ).alias('user_features')
                           )
-                          .withColumn('features', min_maxer_users('features'))
-                          .join(
-                              session_counts, 'client_id', 'inner'
-                          ).repartition(32)
+                          .withColumn('user_features', min_maxer_users('user_features'))
+                          .repartition(32)
                           )
 
     # Get the shopping stages arrays
@@ -513,7 +469,6 @@ def main():
                                         f.last('shopping_stage').alias(
                                             'shopping_stages')
                                     ).
-                                    join(session_counts, 'client_id', 'inner').
                                     repartition(32)
                                     )
 
@@ -538,8 +493,6 @@ def main():
                              agg(
                                  f.last('sessions_hits_count').alias(
                                      'sessions_hits_count')
-                             ).join(
-                                 session_counts, 'client_id', 'inner'
                              ).repartition(32)
                              )
 
