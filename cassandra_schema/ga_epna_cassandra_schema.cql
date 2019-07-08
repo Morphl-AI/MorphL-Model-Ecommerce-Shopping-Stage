@@ -206,52 +206,16 @@ CREATE TABLE morphl.ga_epna_shopping_stages_filtered (
   PRIMARY KEY((client_id), session_id)
 );
 
-DROP TABLE IF EXISTS morphl.ga_epna_data_hits;
+DROP TABLE IF EXISTS morhpl.ga_epna_batch_inference_data;
 
-CREATE TABLE morphl.ga_epna_data_hits (
-  client_id text,
-  user_segment text,
-  session_count int, 
-  features frozen<list<frozen<list<frozen<list<double>>>>>>,
-  PRIMARY KEY((session_count), user_segment, client_id)
-) WITH CLUSTERING ORDER BY (user_segment ASC);
-
-DROP TABLE IF EXISTS morphl.ga_epna_data_sessions;
-
-CREATE TABLE morphl.ga_epna_data_sessions (
-  client_id text,
+CREATE TABLE morphl.ga_epna_batch_inference_data (
+  client_id text, 
   user_segment text,
   session_count int,
-  features frozen<list<frozen<list<double>>>>,
-  PRIMARY KEY((session_count), user_segment, client_id)
-) WITH CLUSTERING ORDER BY (user_segment ASC);
-
-DROP TABLE IF EXISTS morphl.ga_epna_data_users;
-
-CREATE TABLE morphl.ga_epna_data_users (
-  client_id text,
-  user_segment text, 
-  session_count int, 
-  features frozen<list<double>>,
-  PRIMARY KEY((session_count), user_segment, client_id)
-) WITH CLUSTERING ORDER BY (user_segment ASC);
-
-DROP TABLE IF EXISTS morphl.ga_epna_data_num_hits;
-
-CREATE TABLE morphl.ga_epna_data_num_hits (
-  client_id text,
-  user_segment text,
-  session_count int,
+  user_features frozen<list<double>>,
+  sessions_features  frozen<list<frozen<list<double>>>>,
+  hits_features frozen<list<frozen<list<frozen<list<double>>>>>>,
   sessions_hits_count frozen<list<int>>,
-  PRIMARY KEY((session_count), user_segment, client_id)
-) WITH CLUSTERING ORDER BY (user_segment ASC);
-
-DROP TABLE IF EXISTS morphl.ga_epna_data_shopping_stages;
-
-CREATE TABLE morphl.ga_epna_data_shopping_stages (
-  client_id text,
-  user_segment text, 
-  session_count int, 
   shopping_stages frozen<list<frozen<list<double>>>>,
   PRIMARY KEY((session_count), user_segment, client_id)
 ) WITH CLUSTERING ORDER BY (user_segment ASC);
