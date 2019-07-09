@@ -319,7 +319,7 @@ def get_predictions(row):
         result, np.s_[:row.session_count - 1], axis=1).reshape(result.shape[0], 6)
     result = [float(i) for i in result.tolist()[0]]
 
-    return (row.client_id, row.user_segment, row.session_count, result[0], result[1], result[2], result[3], result[4], result[5] ,PREDICTION_DAY_AS_STR)
+    return (row.client_id, result[0], result[1], result[2], result[3], result[4], result[5] ,PREDICTION_DAY_AS_STR)
 
 
 
@@ -367,8 +367,6 @@ def main():
         repartition(32)
         .toDF([
             'client_id',
-            'user_segment',
-            'session_count',
             'all_visits',
             'product_view',
             'add_to_cart',
