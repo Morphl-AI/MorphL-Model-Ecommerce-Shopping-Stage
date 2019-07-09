@@ -89,6 +89,7 @@ def format_and_filter_shopping_stages(stages):
 # have data in all relevant tables.
 def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits_df, product_info_df, session_index_df):
 
+    # Add product info to hits and replace missing values with 0.0
     hits_df = (hits_df
                .join(
                    product_info_df.drop('product_name'),
@@ -114,9 +115,11 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                .repartition(32)
                )
 
+    # Get the number of sessions a user has
     user_session_counts = session_index_df.groupBy(
         'client_id').agg(f.max('session_index').alias('session_count'))
 
+    # Add the session count column to the users dataframe
     users_df = users_df.join(
         user_session_counts, 'client_id', 'inner').repartition(32)
 
@@ -125,7 +128,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
     hits_df_session_ids = hits_df.select('session_id').distinct()
     shopping_stages_df_session_ids = shopping_stages_df.select(
         'session_id').distinct()
-
+    
     complete_session_ids = (sessions_df_session_ids
                             .intersect(
                                 hits_df_session_ids
@@ -264,7 +267,6 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
     # Group shopping stages per session into a set.
     final_shopping_stages_df = (shopping_stages_filtered_by_session_id_df.
                                 join(complete_client_ids, 'client_id', 'inner').
-                                orderBy('session_id').
                                 groupBy('session_id').
                                 agg(f.first('client_id').alias('client_id'),
                                     f.collect_set('shopping_stage').alias(
