@@ -371,10 +371,10 @@ def main():
             'session_count',
             'all_visits',
             'product_view',
-            'checkout_with_add_to_cart',
-            'transaction',
             'add_to_cart',
+            'checkout_with_add_to_cart',
             'checkout_without_add_to_cart',
+            'transaction',
             'prediction_date',
         ])
     )
