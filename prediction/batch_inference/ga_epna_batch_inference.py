@@ -401,7 +401,7 @@ def main():
     (ga_epna_predictions.
      drop('user_segment').
      write.
-     forma('org.apache.spark.sql.cassandra').
+     format('org.apache.spark.sql.cassandra').
      mode('append').
      options(**save_options_ga_epna_predictions).
      save()
