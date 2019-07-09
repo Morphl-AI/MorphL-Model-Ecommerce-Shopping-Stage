@@ -162,7 +162,7 @@ def min_max_sessions(session_features):
     #   'search_result_views', 'search_uniques', 'search_depth', 'search_refinements'
     # ]
     min = [8.0, 1.0,] + [0.0] * 8
-    max = [11196.0, 115.0, 1.0, 4477.0, 5.0, 149.0, 30.0, 22.0, 118.0, 25.0]
+    max = [11196.0, 115.0, 1.0, 4477.0, 5.0, 149.0, 40.0, 22.0, 118.0, 25.0]
 
     for i in range(0, 10):
         session_features[i] = clip(
