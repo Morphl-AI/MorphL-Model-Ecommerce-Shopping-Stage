@@ -42,8 +42,6 @@ def get_spark_session():
     return spark_session
 
 # Return a spark dataframe from a specified Cassandra table.
-
-
 def fetch_from_cassandra(c_table_name, spark_session):
 
     load_options = {
@@ -148,7 +146,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                                                'session_id', 'inner')
                                           )
 
-    # Only keep hits that we have hopping stage and session data for.
+    # Only keep hits that we have stage and session data for.
     hits_filtered_by_session_id_df = (hits_df.
                                       drop('day_of_data_capture').
                                       join(complete_session_ids,

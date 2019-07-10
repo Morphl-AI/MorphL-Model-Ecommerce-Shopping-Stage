@@ -300,31 +300,37 @@ def insert_statistics(statistics):
     spark_session_cass.execute(
         prep_stmt_statistics, bind_list, timeout=CASS_REQ_TIMEOUT)
 
-
+# Map function that makes a prediction for each user
 def get_predictions(row):
 
+    # Get all the relevant numpy arrays
     sessions_array = np.array([row.sessions_features]).astype(np.float32)
     hits_array = np.array([row.hits_features]).astype(np.float32)
     user_array = np.array([row.user_features]).astype(np.float32)
     sessions_hits_count_array = np.array([row.sessions_hits_count])
     shopping_stages = np.array([row.shopping_stages]).astype(np.float32)
 
+    # Input the numpy arrays into the modle
     result = model.npForward({"dataSessions": sessions_array,
                               "dataHits": hits_array,
                               "dataUsers": user_array,
                               "dataNumItems": sessions_hits_count_array,
                               "dataShoppingStage": shopping_stages})
 
+    # Only keep the prediction for the most recent session
     result = np.delete(
         result, np.s_[:row.session_count - 1], axis=1).reshape(result.shape[0], 6)
+
+    # Convert the result to a normal list of python floats
     result = [float(i) for i in result.tolist()[0]]
 
+    # Return the new row to the dataframe
     return (row.client_id, result[0], result[1], result[2], result[3], result[4], result[5] ,PREDICTION_DAY_AS_STR)
 
 
 
 
-
+# Load the model
 model = ModelLSTM_V1(inputShape=(10, 12, 8), outputShape=6, hyperParameters={"randomizeSessionSize": True,
                                                                              "appendPreviousOutput": True,
                                                                              "baseNeurons": 30,
@@ -357,9 +363,11 @@ def main():
     current_day_ids = users_ingested.select('client_id').where(
         "day_of_data_capture = '{}'".format(PREDICTION_DAY_AS_STR))
 
+    # Load the batch inference data from Cassandra and filter it by the client ids from the prediction date
     batch_inference_data = fetch_from_cassandra('ga_epna_batch_inference_data', spark_session).join(
         current_day_ids, 'client_id', 'inner')
 
+    # Convert the dataframe to an rdd so we can apply the mapping function to it
     ga_epna_predictions = (
         batch_inference_data.
         rdd.
@@ -377,8 +385,10 @@ def main():
         ])
     )
 
+    # Cache the df since we will run multiple queries on it 
     ga_epna_predictions.cache()
 
+    # Calculate all the probability statistics
     statistics = {
         'total_predictions': ga_epna_predictions.count(),
         'all_visits': ga_epna_predictions.where("all_visits > 0.5").count(),
@@ -389,8 +399,10 @@ def main():
         'transaction': ga_epna_predictions.where("transaction > 0.5").count(),
     }
 
+    # Save the statistics to Cassandra 
     insert_statistics(statistics)
 
+    # Save the predictions to Cassandra
     save_options_ga_epna_predictions = {
         'keyspace': MORPHL_CASSANDRA_KEYSPACE,
         'table': ('ga_epna_predictions')

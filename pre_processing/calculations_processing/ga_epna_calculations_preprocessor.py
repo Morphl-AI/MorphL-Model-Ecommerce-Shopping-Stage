@@ -130,8 +130,6 @@ def pad_with_zero(features, max_hit_count):
     return features
 
 # Sets values outside of [0.0, 1.0] to 0.0 or 1.0.
-
-
 def clip(value):
     if value < 0.0:
         return 0.0
@@ -144,18 +142,18 @@ def clip(value):
 # Normalizes hit data.
 def min_max_hits(hit_features):
     # Max and min used when training for each feature
-    # ['time_on_page', 'product_detail_views']
+    # ['time_on_page', 'product_detail_views', 'cart_to_detail_rate', 'item_quantity', 'item_revenue',
+    #  'product_adds_to_cart', 'product_checkouts', 'quantity_added_to_cart'
+    # ]
     min = [0.0] * 8
     max = [1451.0, 2.0, 100.0, 1.0, 482.0, 1.0, 1.0, 1.0]
 
-    for i in range(0, 7):
+    for i in range(0, 8):
         hit_features[i] = clip((hit_features[i] - min[i]) / (max[i] - min[i]))
 
     return hit_features
 
 # Normalizes session data.
-
-
 def min_max_sessions(session_features):
     # Max and min used when training for each feature.
     # ['session_duration', 'unique_pageviews', 'transactions', 'revenue', 'unique_purchases', 'days_since_last_session',
@@ -175,8 +173,8 @@ def min_max_sessions(session_features):
 
 def min_max_users(users_features):
     # Max and min values used when training for each feature.
-    # ['device_transactions_per_user', 'device_revenue_per_transactions', 'browser_transactions_per_user', 'browser_revenue_per_transaction'
-    #  'new_visitor', 'returning_visitor', 'is_desktop', 'is_mobile', 'is_tablet'
+    # [ 'session_count', 'device_transactions_per_user', 'device_revenue_per_transaction', 'browser_transactions_per_user',
+    # 'browser_revenue_per_transaction'
     # ]
     min = [1.0, 0.007, 225.0, 0.015, 1540.256]
     max = [6305, 0.048, 2432.607, 0.061, 4209.32]
@@ -288,12 +286,12 @@ def main():
     #
     # user[
     #     session[
-    #         hit[1.0, 2.0, 3.0, 4.0],
-    #         hit[5.0, 6.0, 7.0, 8.0]
+    #         hit[1.0, 2.0, 3.0, 4.0, 0.5, 0.6, 0.7, 0.8],
+    #         hit[5.0, 6.0, 7.0, 8.0, 0.9, 0.1, 0.2, 0.3]
     #     ],
     #     session[
-    #         hit[9.0, 10.0, 11.0, 12.0],
-    #         hit[0.0, 0.0, 0.0, 0.0]
+    #         hit[9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0],
+    #         hit[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     #     ]
     # ]
     ga_epna_data_hits = (ga_epnah_features_filtered_df
@@ -377,7 +375,7 @@ def main():
                              )
 
     # Get user arrays. Similar to sessions with data at user level.
-    # user[1.0, 2.0, 3.0, 4.0, 5.0]
+    # user[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
     ga_epna_data_users = (users_df.
                           withColumn(
                               'is_mobile', f.when(

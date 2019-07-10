@@ -40,7 +40,6 @@ class BasicPreprocessor:
         field_baselines = {}
 
         # device_category: the type of device associated to the user: tablet, mobile or desktop;
-        # sessions: the number of sessions a user has;
         # browser: the type of browser used by a user;
         # revenue_per_user: the amount of money a user has spent on the site;
         # transactions_per_user: the number of transactions a user completed on the site.
@@ -73,6 +72,7 @@ class BasicPreprocessor:
         # search_depth: total number of subsequent page views made after an internal search;
         # search_refinements: the number of times a transition occurs between internal keywords search within a session
         #                     ex: "shoes", "shoes", "pants", "pants" => 1 transition from shoes to pants
+        # search_used: either Visits With Site Search or Visits Without Site Search;
         # days_since_last_session: the number of days elapsed since the last sessions.
         field_baselines['ga_epnas_df'] = [
             {'field_name': 'session_duration',
@@ -132,6 +132,14 @@ class BasicPreprocessor:
              },
         ]
 
+
+        # quantity_added_to_cart: number of product units added to the shopping cart ;
+        # product_adds_to_cart: number of times a product was added to the shopping cart;
+        # product_checkouts: number of times a product was included in the check-out process;
+        # item_quantity: number of items purchased;
+        # item_revenue: total revenue from purchased product items;
+        # cart_to_detail_rate: product adds divided by views of product details;
+        # product_detail_views: number of times users viewed the product-detail page.
         field_baselines['ga_epnap_df'] = [
             {'field_name': 'quantity_added_to_cart',
              'original_name': 'ga:quantityAddedToCart',
