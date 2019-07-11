@@ -323,6 +323,12 @@ def main():
                                  f.when(f.col('search_used') == 'Visits Without Site Search', 1.0).otherwise(
                                      0.0)
                              )
+                             .withColumn('new_visitor',
+                                f.when(f.col('session_index') == 1, 1.0).otherwise(0.0)
+                             )
+                             .withColumn('returning_visitor', 
+                                f.when(f.col('session_index') > 1, 1.0).otherwise(0.0)
+                             )
                              .select(
                                  'client_id',
                                  'session_id',
@@ -338,7 +344,9 @@ def main():
                                      f.col('search_depth'),
                                      f.col('search_refinements'),
                                      f.col('with_site_search'),
-                                     f.col('without_site_search')
+                                     f.col('without_site_search'),
+                                     f.col('new_visitor'),
+                                     f.col('returning_visitor'),
                                  ).alias('sessions_features')
                              )
                              .withColumn('sessions_features', min_maxer_sessions('sessions_features'))
@@ -364,14 +372,6 @@ def main():
                               'is_desktop', f.when(
                                   f.col('device_category') == 'mobile', 1.0).otherwise(0.0)
                           ).
-                          withColumn(
-                              'new_visitor', f.when(
-                                  f.col('session_count') == 1.0, 1.0).otherwise(0.0)
-                          ).
-                          withColumn(
-                              'returning_visitor', f.when(
-                                  f.col('session_count') != 1.0, 1.0).otherwise(0.0)
-                          ).
                           select(
                               'client_id',
                               f.array(
@@ -383,8 +383,6 @@ def main():
                                   f.col('is_desktop'),
                                   f.col('is_mobile'),
                                   f.col('is_tablet'),
-                                  f.col('new_visitor'),
-                                  f.col('returning_visitor'),
                               ).alias('user_features')
                           )
                           .withColumn('user_features', min_maxer_users('user_features'))
