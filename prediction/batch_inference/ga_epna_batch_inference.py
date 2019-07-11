@@ -318,11 +318,10 @@ def get_predictions(row):
                               "dataShoppingStage": shopping_stages})
 
     # Only keep the prediction for the most recent session
-    result = np.delete(
-        result, np.s_[:row.session_count - 1], axis=1).reshape(result.shape[0], 6)
+    result = result[0][-1]
 
     # Convert the result to a normal list of python floats
-    result = [float(i) for i in result.tolist()[0]]
+    result = [float(i) for i in result.tolist()]
 
     # Return the new row to the dataframe
     return (row.client_id, result[0], result[1], result[2], result[3], result[4], result[5] ,PREDICTION_DAY_AS_STR)
