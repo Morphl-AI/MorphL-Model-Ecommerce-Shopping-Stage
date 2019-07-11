@@ -119,16 +119,6 @@ def calculate_browser_device_features(users_df, sessions_df):
             ).repartition(32)
 
 
-# Udf function used to pad the session arrays with hits of zero value.
-def pad_with_zero(features, max_hit_count):
-
-    for session_count in range(len(features)):
-        features[session_count] = features[session_count] + \
-            [[0.0] * 8] * \
-            (max_hit_count - len(features[session_count]))
-
-    return features
-
 # Sets values outside of [0.0, 1.0] to 0.0 or 1.0.
 def clip(value):
     if value < 0.0:
@@ -154,12 +144,14 @@ def min_max_hits(hit_features):
     return hit_features
 
 # Normalizes session data.
+
+
 def min_max_sessions(session_features):
     # Max and min used when training for each feature.
     # ['session_duration', 'unique_pageviews', 'transactions', 'revenue', 'unique_purchases', 'days_since_last_session',
     #   'search_result_views', 'search_uniques', 'search_depth', 'search_refinements'
     # ]
-    min = [8.0, 1.0,] + [0.0] * 8
+    min = [8.0, 1.0] + [0.0] * 8
     max = [11196.0, 115.0, 1.0, 4477.0, 5.0, 149.0, 40.0, 22.0, 118.0, 25.0]
 
     for i in range(0, 10):
@@ -185,18 +177,30 @@ def min_max_users(users_features):
 
     return users_features
 
+def pad_with_zero(hits_features):
+    max_hit_count = 0
+    for session in hits_features:
+        max_hit_count = max_hit_count if len(session) < max_hit_count else len(session)
+
+    for session_count in range(len(hits_features)):
+        hits_features[session_count] = hits_features[session_count] + \
+            [[0.0] * 8] * \
+            (max_hit_count - len(hits_features[session_count]))
+
+    return hits_features
+
+
 # Save array data to Cassandra.
 
 
 def save_data(hits_data, hits_num_data, session_data, user_data, shopping_stages_data):
-
 
     ga_epna_batch_inference_data = (hits_data
                                     .join(hits_num_data, 'client_id', 'inner')
                                     .join(session_data, 'client_id', 'inner')
                                     .join(user_data, 'client_id', 'inner')
                                     .join(shopping_stages_data, 'client_id', 'inner')
-                                    .repartition(32)          
+                                    .repartition(32)
                                     )
 
     save_options_ga_epna_batch_inference_data = {
@@ -235,34 +239,6 @@ def main():
     users_df = calculate_browser_device_features(
         ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
 
-    # Get the maximum hit count for each session count
-    hit_counts = (ga_epnah_features_filtered_df
-                  .groupBy('session_id')
-                  .agg(
-                      f.first('client_id').alias('client_id'),
-                      f.count('date_hour_minute').alias('hit_count')
-                  )
-                  .groupBy('client_id')
-                  .agg(
-                      f.count('session_id').alias('session_count'),
-                      f.max('hit_count').alias('hit_count')
-                  )
-                  .groupBy('session_count')
-                  .agg(
-                      f.max('hit_count').alias('max_hit_count')
-                  ).repartition(32)
-                  )
-
-    # Get the session_counts for all client_ids
-    session_counts = (ga_epnas_features_filtered_df
-                      .groupBy('client_id')
-                      .agg(
-                          f.count('session_id').alias('session_count')
-                      )
-                      .withColumn('user_segment', f.substring('client_id', 1, 4)))
-
-    session_counts.cache()
-
     # Initialize udfs
     min_maxer_hits = f.udf(min_max_hits, ArrayType(DoubleType()))
     min_maxer_sessions = f.udf(min_max_sessions, ArrayType(DoubleType()))
@@ -281,7 +257,7 @@ def main():
     # group the data by session id and get the client_id and last collected list with all the data.
     # collect all the session lists with hit lists inside over the window partitioned by client_id,
     # group data by client id and get the client_id and last collected list.
-    # Add the session counts and hit counts then pad the hits with zero according to the max hit count 
+    # Add the session counts and hit counts then pad the hits with zero according to the max hit count
     # of users with that session count.
     #
     # user[
@@ -320,10 +296,9 @@ def main():
                              'hits_features').over(hits_window_by_user))
                          .groupBy('client_id').agg(
                              f.last('hits_features').alias('hits_features')
-                         ).join(session_counts, 'client_id', 'inner')
-                         .join(hit_counts, 'session_count', 'inner')
-                         .withColumn('hits_features', zero_padder('hits_features', 'max_hit_count'))
-                         .drop('max_hit_count')
+                         ).
+                         withColumn('hits_features',
+                                    zero_padder('hits_features'))
                          .repartition(32)
                          )
 
@@ -484,7 +459,8 @@ def main():
                              groupBy('session_id').
                              agg(
                                  f.first('client_id').alias('client_id'),
-                                 f.count('date_hour_minute').alias('hits_count')
+                                 f.count('date_hour_minute').alias(
+                                     'hits_count')
                              ).
                              withColumn('sessions_hits_count', f.collect_list('hits_count').over(num_hits_window_by_user)).
                              groupBy('client_id').
