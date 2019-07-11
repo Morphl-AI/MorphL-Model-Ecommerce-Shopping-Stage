@@ -39,7 +39,6 @@ class ModelLSTM_V1(nn.Module):
         self.hyperParameters = hyperParameters
 
         self.appendPreviousOutput = hyperParameters["appendPreviousOutput"]
-        self.outputType = hyperParameters["outputType"]
         baseNeurons = hyperParameters["baseNeurons"]
         self.hidenShape2 = baseNeurons + int(inputShape[1]) + outputShape \
             if self.appendPreviousOutput else baseNeurons + int(inputShape[1])
@@ -214,10 +213,8 @@ class ModelLSTM_V1(nn.Module):
         y1 = F.relu(self.fc1(sess_hidden))
         y2 = self.fc2(y1)
 
-        if self.outputType == "classification":
-            y3 = F.softmax(y2, dim=-1)
-        else:
-            y3 = tr.sigmoid(y2)
+        y3 = tr.sigmoid(y2)
+        
         return y3
 
     def computeHiddens(self, trInputs):
@@ -330,12 +327,12 @@ def get_predictions(row):
 
 
 # Load the model
-model = ModelLSTM_V1(inputShape=(10, 12, 8), outputShape=6, hyperParameters={"randomizeSessionSize": True,
+model = ModelLSTM_V1(inputShape=(8, 14, 8), outputShape=6, hyperParameters={"randomizeSessionSize": True,
                                                                              "appendPreviousOutput": True,
                                                                              "baseNeurons": 30,
-                                                                             "outputType": "regression",
+                                                                             "lookaheadSessions": 1,
                                                                              'normalization': 'min_max',
-                                                                             'inShape': (10, 12, 8),
+                                                                             'inShape': (8, 14, 8),
                                                                              "attributionModeling": "linear"})
 # Load the model weights.
 model.loadWeights('/opt/models/ga_epna_model_weights.pkl')
