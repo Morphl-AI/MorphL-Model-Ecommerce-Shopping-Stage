@@ -210,15 +210,13 @@ DROP TABLE IF EXISTS morhpl.ga_epna_batch_inference_data;
 
 CREATE TABLE morphl.ga_epna_batch_inference_data (
   client_id text, 
-  user_segment text,
-  session_count int,
   user_features frozen<list<double>>,
   sessions_features  frozen<list<frozen<list<double>>>>,
   hits_features frozen<list<frozen<list<frozen<list<double>>>>>>,
   sessions_hits_count frozen<list<int>>,
   shopping_stages frozen<list<frozen<list<double>>>>,
-  PRIMARY KEY((session_count), user_segment, client_id)
-) WITH CLUSTERING ORDER BY (user_segment ASC);
+  PRIMARY KEY(client_id)
+)
 
 DROP TABLE IF EXISTS morphl.ga_epna_predictions;
 
