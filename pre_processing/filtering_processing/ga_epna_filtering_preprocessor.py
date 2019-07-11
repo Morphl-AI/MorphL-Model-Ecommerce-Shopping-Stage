@@ -121,12 +121,21 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
     users_df = users_df.join(
         user_session_counts, 'client_id', 'inner').repartition(32)
 
+    sessions_df = (sessions_df
+                   .join(
+                       session_index_df.drop('day_of_data_capture'),
+                       ['client_id', 'session_id'],
+                       'inner'
+                   )
+                   .repartition(32)
+                   )
+
     # Get the session ids that are present in all tables.
     sessions_df_session_ids = sessions_df.select('session_id').distinct()
     hits_df_session_ids = hits_df.select('session_id').distinct()
     shopping_stages_df_session_ids = shopping_stages_df.select(
         'session_id').distinct()
-    
+
     complete_session_ids = (sessions_df_session_ids
                             .intersect(
                                 hits_df_session_ids
