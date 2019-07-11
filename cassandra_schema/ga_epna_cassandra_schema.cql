@@ -177,6 +177,7 @@ CREATE TABLE morphl.ga_epnas_features_filtered (
   search_depth double,
   search_refinements double,
   search_used text,
+  session_index int, 
   PRIMARY KEY ((client_id), session_id)
 );
 
@@ -206,7 +207,7 @@ CREATE TABLE morphl.ga_epna_shopping_stages_filtered (
   PRIMARY KEY((client_id), session_id)
 );
 
-DROP TABLE IF EXISTS morhpl.ga_epna_batch_inference_data;
+DROP TABLE IF EXISTS morphl.ga_epna_batch_inference_data;
 
 CREATE TABLE morphl.ga_epna_batch_inference_data (
   client_id text, 
@@ -216,7 +217,7 @@ CREATE TABLE morphl.ga_epna_batch_inference_data (
   sessions_hits_count frozen<list<int>>,
   shopping_stages frozen<list<frozen<list<double>>>>,
   PRIMARY KEY(client_id)
-)
+);
 
 DROP TABLE IF EXISTS morphl.ga_epna_predictions;
 
@@ -259,6 +260,7 @@ CREATE TABLE morphl.ga_epna_predictions_statistics(
   transaction int,
   PRIMARY KEY((prediction_date))
 );
+
 DROP TABLE IF EXISTS morphl.ga_epna_config_parameters;
 
 CREATE TABLE morphl.ga_epna_config_parameters (
