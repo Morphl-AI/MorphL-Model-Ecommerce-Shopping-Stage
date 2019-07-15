@@ -1,5 +1,4 @@
 from os import getenv
-import numpy as np
 
 from pyspark.sql import SparkSession, Window, functions as f
 
@@ -405,7 +404,6 @@ def main():
     }
 
     (ga_epna_predictions.
-     drop('user_segment').
      write.
      format('org.apache.spark.sql.cassandra').
      mode('append').
