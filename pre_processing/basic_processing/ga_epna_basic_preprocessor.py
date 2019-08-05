@@ -129,19 +129,12 @@ class BasicPreprocessor:
         ]
 
         # time_on_page: the amount of time a user spent on the page;
-        # date_hour_minute: the date, hour and minute the hit occured at.
+        # date_hour_minute: the date, hour and minute the hit occured at;
         # user_type: a boolean signifying wether the user is new or returning;
+        # product_detail_views: number of time the product details were viewed.
         field_baselines['ga_epnah_df'] = [
             {'field_name': 'time_on_page',
              'original_name': 'ga:timeOnPage',
-             'needs_conversion': True,
-             },
-            {'field_name': 'product_list_clicks',
-             'original_name': 'ga:productListClicks',
-             'needs_conversion': True,
-             },
-            {'field_name': 'product_list_views',
-             'original_name': 'ga:productListViews',
              'needs_conversion': True,
              },
             {'field_name': 'user_type',
@@ -376,12 +369,12 @@ class BasicPreprocessor:
         ga_config_df = (
             self.fetch_from_cassandra(
                 'ga_epna_config_parameters', spark_session)
-            .filter("morphl_component_name = 'ga_epna' AND parameter_name = 'days_worth_of_data_to_load'"))
+            .filter("morphl_component_name = 'ga_epna' AND parameter_name = 'days_prediction_interval'"))
 
-        days_worth_of_data_to_load = int(ga_config_df.first().parameter_value)
+        days_prediction_interval = int(ga_config_df.first().parameter_value)
 
         start_date = ((datetime.datetime.now(
-        ) - datetime.timedelta(days=days_worth_of_data_to_load)).strftime('%Y-%m-%d'))
+        ) - datetime.timedelta(days=days_prediction_interval + 1)).strftime('%Y-%m-%d'))
 
         # Fetch required tables from Cassandra.
         ga_epna_users_df = self.fetch_from_cassandra(

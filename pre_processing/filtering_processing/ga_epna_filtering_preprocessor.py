@@ -58,55 +58,106 @@ def fetch_from_cassandra(c_table_name, spark_session):
     return df
 
 
+# Formats the stages column so that 
+# we keep relevant stages and give them a standard format for one hot encoding.
 def format_and_filter_shopping_stages(stages):
+
+    # Relevant stages for the current model.
     stages_to_keep = ['ALL_VISITS', 'ALL_VISITS|PRODUCT_VIEW', 'ADD_TO_CART|ALL_VISITS|PRODUCT_VIEW',
                       'ADD_TO_CART|ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 'ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 'TRANSACTION']
 
+    # Sort the stages because the stages set does not always have the same order.
     stages.sort()
+
+    # Break up the stages array into a string with the format "stage1|stage2|stage3".
     stages = '|'.join(stages)
+
+    # Replace all stages that have a transaction with the 'TRANSACTION' strings.
     stages = 'TRANSACTION' if stages.find('TRANSACTION') != -1 else stages
-    stages = stages if stages in stages_to_keep else 'ALL_VISITS'
+
+    # Replace lonely product views with 'ALL_VISITS|PRODUCT_VIEW'.
     stages = stages if stages != 'PRODUCT_VIEW' else 'ALL_VISITS|PRODUCT_VIEW'
+
+    # All stages that are not part of the list we need for the model,
+    # will be replaced with 'ALL_VISITS'.
+    stages = stages if stages in stages_to_keep else 'ALL_VISITS'
 
     return stages
 
 
+# Filters the data and makes sure that the client_ids we make predictions on
+# have data in all relevant tables.
 def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits_df):
 
-    # Get all the ids that have the required shopping stages.
-    client_ids_with_stages = shopping_stages_df.select(
-        'client_id').distinct()
-    session_ids_with_stages = shopping_stages_df.select(
+
+    # Get the session ids that are present in all tables.
+    sessions_df_session_ids = sessions_df.select('session_id').distinct()
+    hits_df_session_ids = hits_df.select('session_id').distinct()
+    shopping_stages_df_session_ids = shopping_stages_df.select(
         'session_id').distinct()
+
+    complete_session_ids = (sessions_df_session_ids
+                            .intersect(
+                                hits_df_session_ids
+                            )
+                            .intersect(
+                                shopping_stages_df_session_ids
+                            )
+                            )
+    
+    # Will be reused multiple times so caching will improve performance.
+    complete_session_ids.cache()
+
+    # Only keep sessions that we have shopping stage and hit data for.
+    sessions_filtered_by_session_id_df = (sessions_df.
+                                          drop('day_of_data_capture').
+                                          join(complete_session_ids,
+                                               'session_id', 'inner')
+                                          )
+    
+    # Only keep hits that we have hopping stage and session data for.
+    hits_filtered_by_session_id_df = (hits_df.
+                                      drop('day_of_data_capture').
+                                      join(complete_session_ids,
+                                           'session_id', 'inner')
+                                      )
+
+    # Only keep shopping stage info that we have hit and session data on.
+    shopping_stages_filtered_by_session_id_df = (shopping_stages_df.
+                                                 drop('day_of_data_capture').
+                                                 join(complete_session_ids,
+                                                      'session_id', 'inner')
+                                                 )
+    
+    # Get all the ids that have the required shopping stages.
+    client_ids_with_stages = (shopping_stages_filtered_by_session_id_df.
+                              select('client_id')
+                              .distinct()
+                              )
 
     # Get all distinct client ids for users, sessions and hits.
     client_ids_users = users_df.select('client_id').distinct()
-    client_ids_sessions = sessions_df.select(
+    client_ids_sessions = sessions_filtered_by_session_id_df.select(
         'client_id').distinct()
-    client_ids_hits = hits_df.select('client_id').distinct()
+    client_ids_hits = hits_filtered_by_session_id_df.select('client_id').distinct()
 
-    # Get client_ids that exist in all dfs
+    # Get client_ids that exist in all dfs.
     complete_client_ids = (client_ids_users
-                           .join(
-                               client_ids_sessions,
-                               'client_id',
-                               'inner')
-                           .join(
-                               client_ids_hits,
-                               'client_id',
-                               'inner')
-                           .join(
+                           .intersect(
+                               client_ids_sessions
+                           )
+                           .intersect(
+                               client_ids_hits
+                           )
+                           .intersect(
                                client_ids_with_stages,
-                               'client_id',
-                               'inner'
                            )
                            )
 
-    # Cache these dfs since they will be used numerous times.
-    session_ids_with_stages.cache()
+    # Will be reused so caching improves performance.
     complete_client_ids.cache()
 
-    # Filter users by client ids with shopping stages.
+    # Only keep users with complete data.
     filtered_users_df = (users_df.
                          drop('day_of_data_capture').
                          join(complete_client_ids, 'client_id', 'inner')
@@ -114,7 +165,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
 
     filtered_users_df.repartition(32)
 
-    # Filter mobile brand users by client ids with shopping stages.
+  
     filtered_mobile_brand_df = (mobile_brand_df.
                                 drop('day_of_data_capture', 'sessions').
                                 join(complete_client_ids,
@@ -123,22 +174,18 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
 
     filtered_mobile_brand_df.repartition(32)
 
-    # Filter hits by session ids with shopping stages.
-    filtered_hits_df = (hits_df.
+    # Only keep hits with complete data
+    filtered_hits_df = (hits_filtered_by_session_id_df.
                         drop('day_of_data_capture').
-                        join(session_ids_with_stages,
-                             'session_id', 'inner').
                         join(complete_client_ids,
                              'client_id', 'inner')
                         )
 
     filtered_hits_df.repartition(32)
 
-    # Filter sessions by session ids with shopping stages.
-    filtered_sessions_df = (sessions_df.
+    # Only keep sessions with complete data
+    filtered_sessions_df = (sessions_filtered_by_session_id_df.
                             drop('day_of_data_capture').
-                            join(session_ids_with_stages,
-                                 'session_id', 'inner').
                             join(complete_client_ids,
                                  'client_id', 'inner')
                             )
@@ -171,7 +218,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                                    'mobile_device_branding'))
                                )
 
-    # Add the mobile data to uses that have a mobile device, otherwise
+    # Add the mobile data to users that have a mobile device, otherwise
     # make the column equal to (not set).
     final_users_df = (aggregated_users_df.
                       join(grouped_mobile_brand_df,
@@ -186,7 +233,8 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
         format_and_filter_shopping_stages, StringType())
 
     # Group shopping stages per session into a set.
-    final_shopping_stages_df = (shopping_stages_df.
+    final_shopping_stages_df = (shopping_stages_filtered_by_session_id_df.
+                                join(complete_client_ids, 'client_id', 'inner').
                                 orderBy('session_id').
                                 groupBy('session_id').
                                 agg(f.first('client_id').alias('client_id'),
@@ -299,7 +347,7 @@ def main():
     ))
 
     save_filtered_data(
-        filtered_data_dfs['user'], filtered_data_dfs['session'], filtered_data_dfs['hit'])
+        filtered_data_dfs['user'], filtered_data_dfs['session'], filtered_data_dfs['hit'], filtered_data_dfs['shopping_stages'])
 
 
 if __name__ == '__main__':

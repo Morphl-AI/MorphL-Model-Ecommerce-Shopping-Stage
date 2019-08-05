@@ -2,7 +2,10 @@ from os import getenv
 import numpy as np
 
 from pyspark.sql import SparkSession
+from pyspark.sql import Window, functions as f
 
+from cassandra.cluster import Cluster
+from cassandra.auth import PlainTextAuthProvider
 
 import numpy as np
 import torch as tr
@@ -15,15 +18,17 @@ MORPHL_CASSANDRA_USERNAME = getenv('MORPHL_CASSANDRA_USERNAME')
 MORPHL_CASSANDRA_PASSWORD = getenv('MORPHL_CASSANDRA_PASSWORD')
 MORPHL_CASSANDRA_KEYSPACE = getenv('MORPHL_CASSANDRA_KEYSPACE')
 
-HDFS_PORT = 9000
+CASS_REQ_TIMEOUT = 3600.0
+
 PREDICTION_DAY_AS_STR = getenv('PREDICTION_DAY_AS_STR')
-UNIQUE_HASH = getenv('UNIQUE_HASH')
 
 MASTER_URL = 'local[*]'
 APPLICATION_NAME = 'batch-inference'
 
 
 device = tr.device("cuda") if tr.cuda.is_available() else tr.device("cpu")
+
+# Model class used for predictions.
 
 
 class ModelLSTM_V1(nn.Module):
@@ -64,11 +69,8 @@ class ModelLSTM_V1(nn.Module):
                             (loadedParams, thisParams))
 
         for i, item in enumerate(trainableParams):
-            if item.shape != params[i].shape:
-                raise Exception("Inconsistent parameters: %d vs %d." %
-                                (item.shape, params[i].shape))
             with tr.no_grad():
-                item[:] = self.maybeCuda(params[i][:])
+                item[:] = params[i][:].to(device)
             item.requires_grad_(True)
         print("Succesfully loaded weights (%d parameters) " % (loadedParams))
 
@@ -113,16 +115,10 @@ class ModelLSTM_V1(nn.Module):
                 npResults[key] = self.getNpData(results[key])
 
         elif type(results) == tr.Tensor:
-            npResults = self.maybeCpu(results.detach()).numpy()
+            npResults = results.detach().to('cpu').numpy()
         else:
             assert False, "Got type %s" % (type(results))
         return npResults
-
-    def maybeCpu(self, x):
-        return x.cpu() if tr.cuda.is_available() and hasattr(x, "cpu") else x
-
-    def maybeCuda(self, x):
-        return x.cuda() if tr.cuda.is_available() and hasattr(x, "cuda") else x
 
     def getTrData(self, data):
         trData = None
@@ -139,9 +135,9 @@ class ModelLSTM_V1(nn.Module):
             for key in data:
                 trData[key] = self.getTrData(data[key])
         elif type(data) is np.ndarray:
-            trData = self.maybeCuda(tr.from_numpy(data))
+            trData = tr.from_numpy(data).to(device)
         elif type(data) is tr.Tensor:
-            trData = self.maybeCuda(data)
+            trData = data.to(device)
         return trData
 
     def getNumParams(self, params):
@@ -254,7 +250,6 @@ class ModelLSTM_V1(nn.Module):
         return hiddens
 
 
-
 # Return a spark dataframe from a specified Cassandra table.
 def fetch_from_cassandra(c_table_name, spark_session):
 
@@ -269,6 +264,41 @@ def fetch_from_cassandra(c_table_name, spark_session):
 
     return df
 
+
+def insert_statistics(statistics):
+    auth_provider = PlainTextAuthProvider(
+        username=MORPHL_CASSANDRA_USERNAME,
+        password=MORPHL_CASSANDRA_PASSWORD
+    )
+    
+    cluster = Cluster(
+        [MORPHL_SERVER_IP_ADDRESS], auth_provider=auth_provider)
+    
+    spark_session_cass = cluster.connect(MORPHL_CASSANDRA_KEYSPACE)
+    
+    insert_sql_parts = [
+        'INSERT INTO ga_epna_predictions_statistics ',
+        '(prediction_date, total_predictions, all_visits, product_view, checkout_with_add_to_cart,', 
+        'transaction, add_to_cart, checkout_without_add_to_cart)'
+        'VALUES (?,?,?,?,?,?,?,?)',
+    ]
+    
+    insert_sql = ' '.join(insert_sql_parts)
+    
+    prep_stmt_statistics = spark_session_cass.prepare(insert_sql)
+    
+    bind_list = [
+        PREDICTION_DAY_AS_STR,
+        statistics['total_predictions'],
+        statistics['all_visits'],
+        statistics['product_view'],
+        statistics['checkout_with_add_to_cart'],
+        statistics['transaction'],
+        statistics['add_to_cart'],
+        statistics['checkout_without_add_to_cart']
+    ]
+    
+    spark_session_cass.execute(prep_stmt_statistics, bind_list, timeout=CASS_REQ_TIMEOUT)
 
 def main():
     spark_session = (
@@ -285,45 +315,161 @@ def main():
     log4j = spark_session.sparkContext._jvm.org.apache.log4j
     log4j.LogManager.getRootLogger().setLevel(log4j.Level.ERROR)
 
+    users_ingested = fetch_from_cassandra(
+        'ga_epnau_features_raw', spark_session)
+
+    # Get the ids of users from the current day of predictions.
+    current_day_ids = users_ingested.select('client_id').where(
+        "day_of_data_capture = '{}'".format(PREDICTION_DAY_AS_STR))
+
+    # Get all the data filtered by the client ids from the current day.
     sessions = fetch_from_cassandra(
-        'ga_epna_data_sessions', spark_session)
+        'ga_epna_data_sessions', spark_session).join(current_day_ids, 'client_id', 'inner')
     hits = fetch_from_cassandra(
-        'ga_epna_data_hits', spark_session)
+        'ga_epna_data_hits', spark_session).join(current_day_ids, 'client_id', 'inner')
     users = fetch_from_cassandra(
-        'ga_epna_data_users', spark_session)
+        'ga_epna_data_users', spark_session).join(current_day_ids, 'client_id', 'inner')
     num_items = fetch_from_cassandra(
-        'ga_epna_data_num_hits', spark_session)
+        'ga_epna_data_num_hits', spark_session).join(current_day_ids, 'client_id', 'inner')
     shopping_stage = fetch_from_cassandra(
-        'ga_epna_data_shopping_stages', spark_session)
+        'ga_epna_data_shopping_stages', spark_session).join(current_day_ids, 'client_id', 'inner')
 
-    model = ModelLSTM_V1(inputShape=(7, 12, 4), outputShape=6, hyperParameters={"randomizeSessionSize": True,
-                                                                                "appendPreviousOutput": True, "baseNeurons": 30, "outputType": "regression", "attributionModeling": "linear"})
+    # Load the model.
+    model = ModelLSTM_V1(inputShape=(9, 12, 2), outputShape=6, hyperParameters={"randomizeSessionSize": True,
+                                                                                "appendPreviousOutput": True,
+                                                                                "baseNeurons": 30,
+                                                                                "outputType": "regression",
+                                                                                'normalization': 'min_max',
+                                                                                'inShape': (9, 12, 2),
+                                                                                "attributionModeling": "linear"})
+    # Load the model weights.
+    model.loadWeights('/opt/models/ga_epna_model_weights.pkl')
 
-    model.loadWeights("model_predict.pkl")
+    # Get the max session count for the current day.
+    max_session_count = users.agg({'session_count': 'max'}).collect()[0][0]
 
-    for session_count in range(1, 21):
-        sessions_array = np.array(sessions.filter("session_count == {}".format(
-            session_count)).select('features').rdd.flatMap(lambda x: x).collect())
+    statistics = {
+        'add_to_cart': 0,
+        'all_visits': 0,
+        'checkout_with_add_to_cart': 0,
+        'checkout_without_add_to_cart': 0,
+        'product_view': 0,
+        'transaction': 0,
+        'total_predictions': 0
+    }
 
-        hits_array = np.array(hits.filter("session_count == {}".format(
-            session_count)).select('features').rdd.flatMap(lambda x: x).collect())
+    # Start a for loop through tall the session counts.
+    for session_count in range(1, max_session_count + 1):
+        # For the first 4 session count segments, we go take the data in smaller chunnks
+        # since most users are found in this range. For all other session counts, we can
+        # take the data in larger chunks Ex: 'GA10' <=  user_segment < 'GA30' vs.
+        # 'GA10' <= user_segment < 'GA15'
+        segment_range = range(
+            10, 95, 5) if session_count < 5 else range(10, 100, 20)
 
-        users_array = np.array(users.filter("session_count == {}".format(
-            session_count)).select('features').rdd.flatMap(lambda x: x).collect())
+        for segment_limit in segment_range:
 
-        num_items_array = np.array(num_items.filter("session_count == {}".format(
-            session_count)).select('sessions_hits_count').rdd.flatMap(lambda x: x).collect())
+            lower_limit = 'GA' + str(segment_limit)
+            upper_limit = 'GA' + \
+                str(segment_limit + 5) if session_count < 5 else 'GA' + str(segment_limit + 20) 
 
-        shopping_stage_array = np.array(shopping_stage.filter("session_count == {}".format(
-            session_count)).select('shopping_stages').rdd.flatMap(lambda x: x).collect())
+            condition_string = "session_count = {} and user_segment >= '{}' and user_segment < '{}'".format(
+                session_count, lower_limit, upper_limit)
 
-        result = model.npForward({"dataSessions": sessions_array,
-                                  "dataHits": hits_array,
-                                  "dataUsers": users_array,
-                                  "dataNumItems": num_items_array,
-                                  "dataShoppingStage": shopping_stage_array})
+            if segment_limit == 90:
 
-        # result will be saved to cassandra
+                condition_string = "session_count = {} and user_segment >= 'GA90'".format(
+                    session_count)
+
+            filtered_users_df = users.filter(condition_string)
+
+            # If there are no users with this session count, skip.
+            if len(filtered_users_df.head(1)) == 0:
+                continue
+
+            # Add an index to the the data ordered by client_id.
+            order_df = (filtered_users_df.
+                        select('client_id').
+                        withColumn(
+                            'index',
+                            f.row_number().over(Window.orderBy('client_id')) - 1
+                        )
+                        )
+
+            # Collect all the data as numpy arrays.
+            users_array = np.array(filtered_users_df.orderBy('client_id').select(
+                'features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
+
+            sessions_array = np.array(sessions.filter(condition_string).orderBy('client_id').select(
+                'features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
+
+            hits_array = np.array(hits.filter(condition_string).orderBy('client_id').select(
+                'features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
+
+            num_items_array = np.array(num_items.filter(condition_string).orderBy(
+                'client_id').select('sessions_hits_count').rdd.flatMap(lambda x: x).collect())
+
+            shopping_stage_array = np.array(shopping_stage.filter(condition_string).orderBy(
+                'client_id').select('shopping_stages').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
+
+            # Get the results from the model.
+            result = model.npForward({"dataSessions": sessions_array,
+                                      "dataHits": hits_array,
+                                      "dataUsers": users_array,
+                                      "dataNumItems": num_items_array,
+                                      "dataShoppingStage": shopping_stage_array})
+            # The results contain predictions for al sessions, we only want to keep
+            # the last one.
+            result = np.delete(
+                result, np.s_[:session_count - 1], axis=1).reshape(result.shape[0], 6)
+
+            # Converts the float 'index' to int.
+            to_int_udf = f.udf(lambda x: int(x), 'int')
+
+            # Use zipWithIndex so that we keep the order of the results while entering them
+            # into a df.
+            result_df = (
+                spark_session.
+                sparkContext.
+                parallelize(result).
+                zipWithIndex().
+                map(lambda x: [float(item) for item in x[0]] + [float(x[1])]).
+                toDF([
+                    'all_visits',
+                    'product_view',
+                    'checkout_with_add_to_cart',
+                    'transaction',
+                    'add_to_cart',
+                    'checkout_without_add_to_cart',
+                    'index'
+                ]).
+                withColumn('index', to_int_udf('index')).
+                join(order_df, 'index', 'inner').
+                drop('index').
+                withColumn('prediction_date', f.lit(PREDICTION_DAY_AS_STR)).
+                repartition(32)
+            )
+
+            for stage, count in statistics.items():
+                if stage == 'total_predictions':
+                    statistics[stage] = count + result_df.count()
+                else:
+                    statistics[stage] = count + result_df.where("{} > 0.5".format(stage)).count()
+
+            save_options_ga_epna_predictions = {
+                'keyspace': MORPHL_CASSANDRA_KEYSPACE,
+                'table': ('ga_epna_predictions')
+            }
+
+            (result_df.
+             write.
+             format('org.apache.spark.sql.cassandra').
+             mode('append').
+             options(**save_options_ga_epna_predictions).
+             save()
+             )
+
+            insert_statistics(statistics)
 
 
 if __name__ == '__main__':

@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ga-epna-deployment
+  labels:
+    run: ga-epna
+  namespace: default
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      run: ga-epna
+  template:
+    metadata:
+      labels:
+        run: ga-epna
+    spec:
+      containers:
+        - name: ga-epna
+          image: pythoncontainer
+          command:
+            [
+              "bash",
+              "/opt/ga_epna/prediction/model_serving/runmodelservingendpoint.sh",
+            ]
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 6868
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: environment-configmap
+          volumeMounts:
+            - name: opt-ga-epna
+              mountPath: /opt/ga_epna
+      volumes:
+        - name: opt-ga-epna
+          hostPath:
+            path: /opt/ga_epna

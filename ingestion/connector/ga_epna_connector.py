@@ -1,6 +1,6 @@
 """Google Analytics Reporting API V4 Connector for the MorphL project"""
 
-from time import sleep, time
+from time import sleep, strptime, mktime
 from json import dumps
 from os import getenv
 from sys import exc_info
@@ -70,6 +70,7 @@ class CassandraPersistence:
         self.type_5_set = set(type_5_list)
 
     def persist_dict_record(self, report_type, meta_dict, data_dict):
+        day_of_data_capture_timestamp = str(mktime(strptime(self.DAY_OF_DATA_CAPTURE, '%Y-%m-%d'))).replace('.0', '')
         raw_cl_id = data_dict['dimensions'][0]
         client_id = raw_cl_id if raw_cl_id.startswith('GA') else 'UNKNOWN'
         json_meta = dumps(meta_dict)
@@ -97,7 +98,7 @@ class CassandraPersistence:
 
         # Session related data
         if report_type in self.type_3_set:
-            session_id = data_dict['dimensions'][1] + '.' + str(client_id)
+            session_id = data_dict['dimensions'][1] + '.' + str(client_id) + '.' + day_of_data_capture_timestamp
             bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
                          session_id, json_meta, json_data]
             return {'cassandra_future': self.session.execute_async(self.prep_stmts[report_type],
@@ -108,7 +109,7 @@ class CassandraPersistence:
 
         # Session shopping stage data
         if report_type in self.type_4_set:
-            session_id = data_dict['dimensions'][1] + '.' + str(client_id)
+            session_id = data_dict['dimensions'][1] + '.' + str(client_id) + '.' + day_of_data_capture_timestamp
             shopping_stage = data_dict['dimensions'][2]
             bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
                          session_id, shopping_stage]
@@ -122,7 +123,7 @@ class CassandraPersistence:
 
         # Hit related data
         if report_type in self.type_5_set:
-            session_id = data_dict['dimensions'][1] + '.' + str(client_id)
+            session_id = data_dict['dimensions'][1] + '.' + str(client_id) + '.' + day_of_data_capture_timestamp
             hit_id = data_dict['dimensions'][2] + \
                 '.' + str(data_dict['dimensions'][4])
             bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
@@ -139,8 +140,8 @@ class CassandraPersistence:
 class GoogleAnalytics:
     def __init__(self):
         self.SCOPES = ['https://www.googleapis.com/auth/analytics.readonly']
-        self.KEY_FILE_LOCATION = getenv('KEY_FILE_LOCATION')
-        self.VIEW_ID = getenv('VIEW_ID')
+        self.KEY_FILE_LOCATION = getenv('GA_EPNA_KEY_FILE_LOCATION')
+        self.VIEW_ID = getenv('GA_EPNA_VIEW_ID')
         self.API_PAGE_SIZE = 10000
         self.DAY_OF_DATA_CAPTURE = getenv('DAY_OF_DATA_CAPTURE')
         self.start_date = self.DAY_OF_DATA_CAPTURE
@@ -302,8 +303,7 @@ class GoogleAnalytics:
         # Pageviews is not used as a feature in the model since it is covered by
         # unique pageviews in the session's request. We add it here so that
         # hits that only have pageview events get retrieved aswell.
-        metrics = ['timeOnPage', 'productListClicks',
-                   'productListViews', 'productDetailViews', 'pageviews']
+        metrics = ['timeOnPage', 'productDetailViews', 'pageviews']
 
         return self.run_report_and_store('hits', dimensions, metrics, user_segment)
 
