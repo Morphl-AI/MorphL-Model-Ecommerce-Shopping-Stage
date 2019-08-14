@@ -11,8 +11,10 @@
         this.accessToken = "";
         this.apiUrl = "";
         this.cookieName = "morphl_prediction";
+        this.cookieNameDisabled = "morphl_disabled";
         this.popupNameMorphl = "morphl_popup_cart";
         this.popupNameGeneral = "morphl_popup_general";
+        this.gaCustomDimension = "dimensionX"; // Session level custom dimension used for tracking shopping stage for an user
 
         // !!!!! Set below the threshold for the predictions values. They will be used only if they are higher than the below value !!!!!!!!
         this.shoppingStageThreshold = 0.5;
@@ -21,6 +23,12 @@
          * Initialize popup display / API call
          */
         this.init = function() {
+          // Check if the popup is disabled
+          var isDisabled = JSObject.getCookie(JSObject.cookieNameDisabled);
+          if (Number(isDisabled) === 1) {
+            return;
+          }
+
           // Check if we already have a prediction in the browser cookie
           var predictedShoppingStage = JSObject.getCookie(JSObject.cookieName);
           if (predictedShoppingStage !== "") {
@@ -139,16 +147,21 @@
         };
 
         /**
-         * Trigger the pop-up display
+         * Add hash param at the end of the url, to trigger the pop-up display
          */
         this.displayPopup = function(shoppingStage) {
-          if (shoppingStage != "n/a") {
-            // !!!!!! This is where we display our call-to-action to the user
-            console.log("Call to action for the", shoppingStage, "stage");
-          } else {
-            // !!!!!! Take other actions.
-            console.log("Take other actions");
-          }
+          var nextHash =
+            shoppingStage != "n/a"
+              ? JSObject.popupNameMorphl
+              : JSObject.popupNameGeneral;
+          window.location.hash = nextHash;
+        };
+
+        /**
+         * Disable the popup display
+         */
+        this.disablePopup = function() {
+          JSObject.setCookie(JSObject.cookieNameDisabled, 1, 2);
         };
 
         /**
@@ -206,6 +219,11 @@
 
               // Trigger the popup display
               JSObject.displayPopup(shoppingStage);
+
+              // Set the custom dimension with the prediction value
+              if (ga !== null) {
+                ga("set", JSObject.gaCustomDimension, shoppingStage);
+              }
             }
           };
 
