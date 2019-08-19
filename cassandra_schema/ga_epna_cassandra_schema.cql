@@ -215,7 +215,7 @@ CREATE TABLE morphl.ga_epna_batch_inference_data (
   sessions_features  frozen<list<frozen<list<double>>>>,
   hits_features frozen<list<frozen<list<frozen<list<double>>>>>>,
   sessions_hits_count frozen<list<int>>,
-  shopping_stages frozen<list<frozen<list<double>>>>,
+  -- shopping_stages frozen<list<frozen<list<double>>>>,
   PRIMARY KEY(client_id)
 );
 

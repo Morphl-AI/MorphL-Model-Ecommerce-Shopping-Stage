@@ -135,10 +135,10 @@ def min_max_hits(hit_features):
     # ['time_on_page', 'product_detail_views', 'cart_to_detail_rate', 'item_quantity', 'item_revenue',
     #  'product_adds_to_cart', 'product_checkouts', 'quantity_added_to_cart'
     # ]
-    min = [0.0] * 8
-    max = [1451.0, 2.0, 100.0, 1.0, 482.0, 1.0, 1.0, 1.0]
+    min = [0.0, 0.0]
+    max = [1495.0, 2.0]
 
-    for i in range(0, 8):
+    for i in range(0, 2):
         hit_features[i] = clip((hit_features[i] - min[i]) / (max[i] - min[i]))
 
     return hit_features
@@ -148,13 +148,13 @@ def min_max_hits(hit_features):
 
 def min_max_sessions(session_features):
     # Max and min used when training for each feature.
-    # ['session_duration', 'unique_pageviews', 'transactions', 'revenue', 'unique_purchases', 'days_since_last_session',
+    # ['session_duration', 'unique_pageviews', 'days_since_last_session',
     #   'search_result_views', 'search_uniques', 'search_depth', 'search_refinements'
     # ]
-    min = [8.0, 1.0] + [0.0] * 8
-    max = [11196.0, 115.0, 1.0, 4477.0, 5.0, 149.0, 40.0, 22.0, 118.0, 25.0]
+    min = [1.0, 0.0073198196, 224.99997, 0.015276575, 1540.2563, 0.0, 0.0]
+    max = [2386.0, 0.04823085, 2432.607, 0.060920756, 4209.3203, 1.0, 1.0]
 
-    for i in range(0, 10):
+    for i in range(0, 7):
         session_features[i] = clip(
             (session_features[i] - min[i]) / (max[i] - min[i]))
 
@@ -168,8 +168,8 @@ def min_max_users(users_features):
     # [ 'session_count', 'device_transactions_per_user', 'device_revenue_per_transaction', 'browser_transactions_per_user',
     # 'browser_revenue_per_transaction'
     # ]
-    min = [1.0, 0.007, 225.0, 0.015, 1540.256]
-    max = [6305, 0.048, 2432.607, 0.061, 4209.32]
+    min = [1.0, 0.0073198196, 224.99997, 0.015276575, 1540.2563]
+    max = [2386.0, 0.04823085, 2432.607, 0.060920756, 4209.3203]
 
     for i in range(0, 5):
         users_features[i] = clip(
@@ -184,7 +184,7 @@ def pad_with_zero(hits_features):
 
     for session_count in range(len(hits_features)):
         hits_features[session_count] = hits_features[session_count] + \
-            [[0.0] * 8] * \
+            [[0.0] * 2] * \
             (max_hit_count - len(hits_features[session_count]))
 
     return hits_features
@@ -193,13 +193,12 @@ def pad_with_zero(hits_features):
 # Save array data to Cassandra.
 
 
-def save_data(hits_data, hits_num_data, session_data, user_data, shopping_stages_data):
+def save_data(hits_data, hits_num_data, session_data, user_data):
 
     ga_epna_batch_inference_data = (hits_data
                                     .join(hits_num_data, 'client_id', 'inner')
                                     .join(session_data, 'client_id', 'inner')
                                     .join(user_data, 'client_id', 'inner')
-                                    .join(shopping_stages_data, 'client_id', 'inner')
                                     .repartition(32)
                                     )
 
@@ -278,12 +277,6 @@ def main():
                              f.array(
                                  f.col('time_on_page'),
                                  f.col('product_detail_views'),
-                                 f.col('cart_to_detail_rate'),
-                                 f.col('item_quantity'),
-                                 f.col('item_revenue'),
-                                 f.col('product_adds_to_cart'),
-                                 f.col('product_checkouts'),
-                                 f.col('quantity_added_to_cart')
                              ).alias('hits_features')
                          ).
                          withColumn('hits_features', min_maxer_hits('hits_features')).
@@ -335,18 +328,15 @@ def main():
                                  f.array(
                                      f.col('session_duration'),
                                      f.col('unique_page_views'),
-                                     f.col('transactions'),
-                                     f.col('transaction_revenue'),
-                                     f.col('unique_purchases'),
                                      f.col('days_since_last_session'),
                                      f.col('search_result_views'),
                                      f.col('search_uniques'),
                                      f.col('search_depth'),
                                      f.col('search_refinements'),
-                                     f.col('with_site_search'),
-                                     f.col('without_site_search'),
                                      f.col('new_visitor'),
                                      f.col('returning_visitor'),
+                                     f.col('with_site_search'),
+                                     f.col('without_site_search'),
                                  ).alias('sessions_features')
                              )
                              .withColumn('sessions_features', min_maxer_sessions('sessions_features'))
@@ -389,59 +379,59 @@ def main():
                           .repartition(32)
                           )
 
-    # Get the shopping stages arrays
-    # user[
-    #       session[stages],
-    #       session[stages]
-    # ]
+    # # Get the shopping stages arrays
+    # # user[
+    # #       session[stages],
+    # #       session[stages]
+    # # ]
 
-    stages_window_by_users = Window.partitionBy(
-        'client_id').orderBy('session_id')
+    # stages_window_by_users = Window.partitionBy(
+    #     'client_id').orderBy('session_id')
 
-    ga_epna_data_shopping_stages = (ga_epna_shopping_stages_filtered_df.
-                                    withColumn(
-                                        'shopping_stage_1', f.when(
-                                            f.col('shopping_stage') == 'ALL_VISITS', 1.0).otherwise(0.0)
-                                    ).
-                                    withColumn(
-                                        'shopping_stage_2', f.when(
-                                            f.col('shopping_stage') == 'ALL_VISITS|PRODUCT_VIEW', 1.0).otherwise(0.0)
-                                    ).
-                                    withColumn(
-                                        'shopping_stage_3', f.when(
-                                            f.col('shopping_stage') == 'ADD_TO_CART|ALL_VISITS|PRODUCT_VIEW', 1.0).otherwise(0.0)
-                                    ).
-                                    withColumn(
-                                        'shopping_stage_4', f.when(
-                                            f.col('shopping_stage') == 'ADD_TO_CART|ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 1.0).otherwise(0.0)
-                                    ).
-                                    withColumn(
-                                        'shopping_stage_5', f.when(
-                                            f.col('shopping_stage') == 'ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 1.0).otherwise(0.0)
-                                    ).
-                                    withColumn('shopping_stage_6', f.when(
-                                        f.col('shopping_stage') == 'TRANSACTION', 1.0).otherwise(0.0)
-                                    )
-                                    .select(
-                                        'client_id',
-                                        'session_id',
-                                        f.array(
-                                            f.col('shopping_stage_2'),
-                                            f.col('shopping_stage_1'),
-                                            f.col('shopping_stage_3'),
-                                            f.col('shopping_stage_6'),
-                                            f.col('shopping_stage_4'),
-                                            f.col('shopping_stage_5'),
-                                        ).alias('shopping_stage')
-                                    ).
-                                    withColumn('shopping_stage', f.collect_list('shopping_stage').over(stages_window_by_users)).
-                                    groupBy('client_id').
-                                    agg(
-                                        f.last('shopping_stage').alias(
-                                            'shopping_stages')
-                                    ).
-                                    repartition(32)
-                                    )
+    # ga_epna_data_shopping_stages = (ga_epna_shopping_stages_filtered_df.
+    #                                 withColumn(
+    #                                     'shopping_stage_1', f.when(
+    #                                         f.col('shopping_stage') == 'ALL_VISITS', 1.0).otherwise(0.0)
+    #                                 ).
+    #                                 withColumn(
+    #                                     'shopping_stage_2', f.when(
+    #                                         f.col('shopping_stage') == 'ALL_VISITS|PRODUCT_VIEW', 1.0).otherwise(0.0)
+    #                                 ).
+    #                                 withColumn(
+    #                                     'shopping_stage_3', f.when(
+    #                                         f.col('shopping_stage') == 'ADD_TO_CART|ALL_VISITS|PRODUCT_VIEW', 1.0).otherwise(0.0)
+    #                                 ).
+    #                                 withColumn(
+    #                                     'shopping_stage_4', f.when(
+    #                                         f.col('shopping_stage') == 'ADD_TO_CART|ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 1.0).otherwise(0.0)
+    #                                 ).
+    #                                 withColumn(
+    #                                     'shopping_stage_5', f.when(
+    #                                         f.col('shopping_stage') == 'ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 1.0).otherwise(0.0)
+    #                                 ).
+    #                                 withColumn('shopping_stage_6', f.when(
+    #                                     f.col('shopping_stage') == 'TRANSACTION', 1.0).otherwise(0.0)
+    #                                 )
+    #                                 .select(
+    #                                     'client_id',
+    #                                     'session_id',
+    #                                     f.array(
+    #                                         f.col('shopping_stage_2'),
+    #                                         f.col('shopping_stage_1'),
+    #                                         f.col('shopping_stage_3'),
+    #                                         f.col('shopping_stage_6'),
+    #                                         f.col('shopping_stage_4'),
+    #                                         f.col('shopping_stage_5'),
+    #                                     ).alias('shopping_stage')
+    #                                 ).
+    #                                 withColumn('shopping_stage', f.collect_list('shopping_stage').over(stages_window_by_users)).
+    #                                 groupBy('client_id').
+    #                                 agg(
+    #                                     f.last('shopping_stage').alias(
+    #                                         'shopping_stages')
+    #                                 ).
+    #                                 repartition(32)
+    #                                 )
 
     # Get the number of hits arrays
     # user[
@@ -469,7 +459,7 @@ def main():
                              )
 
     save_data(ga_epna_data_hits, ga_epna_data_num_hits, ga_epna_data_sessions,
-              ga_epna_data_users, ga_epna_data_shopping_stages)
+              ga_epna_data_users)
 
 
 if __name__ == '__main__':
