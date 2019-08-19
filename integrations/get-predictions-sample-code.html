@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>MorphL | Test API Request</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <!-- !!!!! Copy & paste the below script !!!!! -->
+    <script>
+      function MorphlPredictions() {
+        var JSObject = this;
+
+        this.accessToken = "";
+        this.apiUrl = "";
+        this.cookieName = "morphl_prediction";
+        this.cookieNameDisabled = "morphl_disabled";
+        this.popupNameMorphl = "morphl_popup_cart";
+        this.popupNameGeneral = "morphl_popup_general";
+        this.gaCustomDimension = "dimensionX"; // Session level custom dimension used for tracking shopping stage for an user
+
+        // !!!!! Set below the threshold for the predictions values. They will be used only if they are higher than the below value !!!!!!!!
+        this.shoppingStageThreshold = 0.5;
+
+        /**
+         * Initialize popup display / API call
+         */
+        this.init = function() {
+          // Check if the popup is disabled
+          var isDisabled = JSObject.getCookie(JSObject.cookieNameDisabled);
+          if (Number(isDisabled) === 1) {
+            return;
+          }
+
+          // Check if we already have a prediction in the browser cookie
+          var predictedShoppingStage = JSObject.getCookie(JSObject.cookieName);
+          if (predictedShoppingStage !== "") {
+            JSObject.displayPopup(predictedShoppingStage);
+            return;
+          }
+
+          // Make call to get prediction for the API
+          JSObject.getAPIPrediction();
+        };
+
+        /**
+         * Get a browser cookie
+         *
+         * @param string cname = The cookie name
+         * @return string = The cookie value or an empty string ("") if the cookie doesn't exist
+         */
+        this.getCookie = function(cname) {
+          var name = cname + "=";
+          var decodedCookie = decodeURIComponent(document.cookie);
+          var ca = decodedCookie.split(";");
+          for (var i = 0; i < ca.length; i++) {
+            var c = ca[i];
+            while (c.charAt(0) == " ") {
+              c = c.substring(1);
+            }
+            if (c.indexOf(name) == 0) {
+              return c.substring(name.length, c.length);
+            }
+          }
+          return "";
+        };
+
+        /**
+         * Set a browser cookie
+         *
+         * @param string cname = The cookie name
+         * @param string cvalue = The cookie value
+         * @param string exhours = The expiration interval, in hours
+         */
+        this.setCookie = function(cname, cvalue, exhours) {
+          var d = new Date();
+          d.setTime(d.getTime() + Number(exhours) * 60 * 60 * 1000);
+          var expires = "expires=" + d.toUTCString();
+          document.cookie =
+            cname +
+            "=" +
+            encodeURIComponent(cvalue) +
+            ";" +
+            expires +
+            ";path=/; secure";
+        };
+
+        /**
+         * Get the client id from the Google Analytics cookie.
+         */
+        this.getGoogleAnalyticsClientId = function() {
+          var gaCookie = JSObject.getCookie("_ga");
+
+          if (gaCookie === "") {
+            return null;
+          }
+
+          // Parse the _ga cookie value to the right format.
+          var lastElements = gaCookie.split(".").slice(-2);
+
+          if (lastElements.length == 2) {
+            return "GA" + lastElements.join(".");
+          }
+
+          return null;
+        };
+
+        /**
+        * Return the shopping stage with the highest probability.
+
+        * @param object shoppingStages
+        * @return string all_visits | product_view | add_to_cart | checkout | checkout_with_add_to_cart | checkout_without_add_to_cart | transaction
+        */
+        this.getShoppingStage = function(shoppingStages) {
+          var highestProbability = 0;
+          var nextStage = "n/a";
+
+          // List with allowed stages
+          var allowedStages = [
+            "all_visits",
+            "product_view",
+            "add_to_cart",
+            "checkout",
+            "checkout_with_add_to_cart",
+            "checkout_without_add_to_cart",
+            "transaction"
+          ];
+
+          for (var i = 0; i < allowedStages.length; i++) {
+            var stage = allowedStages[i];
+
+            // Check if the stage exists as a property in the shoppingStages object
+            if (shoppingStages[stage] !== null) {
+              // Convert the value in a number
+              var shoppingStageValue = Number(shoppingStages[stage]);
+
+              // Compare value to the highest probability. Use it only if higher than threshold.
+              if (
+                shoppingStageValue > JSObject.shoppingStageThreshold &&
+                shoppingStageValue > highestProbability
+              ) {
+                // We have a stage with a higher probability, so overwrite our control variables
+                highestProbability = shoppingStageValue;
+                nextStage = stage;
+              }
+            }
+          }
+
+          return nextStage;
+        };
+
+        /**
+         * Add hash param at the end of the url, to trigger the pop-up display
+         */
+        this.displayPopup = function(shoppingStage) {
+          var nextHash =
+            shoppingStage != "n/a"
+              ? JSObject.popupNameMorphl
+              : JSObject.popupNameGeneral;
+          window.location.hash = nextHash;
+        };
+
+        /**
+         * Disable the popup display
+         */
+        this.disablePopup = function() {
+          JSObject.setCookie(JSObject.cookieNameDisabled, 1, 2);
+        };
+
+        /**
+         * Interogate Morphl API and get the value of the prediction for the client ID.
+         * Display popups depending on the shopping stage with the highest probability.
+         */
+        this.getAPIPrediction = function() {
+          // Set up our HTTP request
+          var xhr = new XMLHttpRequest();
+
+          // Setup our listener to process completed requests
+          xhr.onload = function() {
+            // Set a default value for the shopping stage
+            var shoppingStage = "n/a";
+
+            // Process our return data
+            if (xhr.status == 200) {
+              // This will run when the request is successful
+              var morphlRes = JSON.parse(xhr.response);
+
+              // Validate the response received from the API
+              // Check if the client id has a valid prediction
+              if (
+                morphlRes &&
+                morphlRes.status &&
+                Number(morphlRes.status) == 1 &&
+                morphlRes.prediction &&
+                typeof morphlRes.prediction === "object" &&
+                morphlRes.prediction.shopping_stages &&
+                typeof morphlRes.prediction.shopping_stages === "object"
+              ) {
+                // Get the shopping stage with the highest probability, above the threshold
+                var nextShoppingStage = JSObject.getShoppingStage(
+                  morphlRes.prediction.shopping_stages
+                );
+
+                // console.log("Next shopping stage is: ", nextShoppingStage);
+
+                // We're going to use only the stages related to the cart - checkout process.
+                if (
+                  [
+                    "add_to_cart",
+                    "checkout",
+                    "checkout_with_add_to_cart",
+                    "checkout_without_add_to_cart",
+                    "transaction"
+                  ].indexOf(nextShoppingStage) !== -1
+                ) {
+                  shoppingStage = nextShoppingStage;
+                }
+              }
+
+              // Set a cookie with the Morphl prediction value
+              JSObject.setCookie(JSObject.cookieName, shoppingStage, 2);
+
+              // Trigger the popup display
+              JSObject.displayPopup(shoppingStage);
+
+              // Set the custom dimension with the prediction value
+              if (ga !== null) {
+                ga("set", JSObject.gaCustomDimension, shoppingStage);
+              }
+            }
+          };
+
+          var clientId = JSObject.getGoogleAnalyticsClientId();
+
+          if (clientId !== null) {
+            // Create and send the GET request
+            // The first argument is the post type (GET, POST, PUT, DELETE, etc.)
+            // The second argument is the endpoint URL
+            xhr.open("GET", String(JSObject.apiUrl) + "" + String(clientId));
+            xhr.setRequestHeader("Authorization", JSObject.accessToken);
+            xhr.send();
+          }
+        };
+      }
+
+      function handleMorphlExperiment() {
+        var morphlPredictions = new MorphlPredictions();
+
+        // !!!!! Set your values for the below variables !!!!!!!!
+        morphlPredictions.apiUrl =
+          "https://test.api.url/shopping-stage/getprediction/";
+        morphlPredictions.accessToken =
+          "token obtained from the /authorized endpoint, using API key & API secret";
+
+        morphlPredictions.init();
+      }
+    </script>
+    <!-- !!!!! Copy & paste the above script !!!!! -->
+  </head>
+  <body onload="javascript:handleMorphlExperiment()"></body>
+</html>

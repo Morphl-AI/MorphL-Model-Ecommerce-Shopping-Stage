@@ -46,10 +46,45 @@ CREATE TABLE morphl.ga_epna_hits (
   client_id text,
   day_of_data_capture date,
   session_id text,
-  hit_id text,
+  date_hour_minute text,
   json_meta text,
   json_data text,
-  PRIMARY KEY ((client_id), day_of_data_capture, session_id, hit_id)
+  PRIMARY KEY ((client_id), day_of_data_capture, session_id, date_hour_minute)
+) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
+
+DROP TABLE IF EXISTS morphl.ga_epna_product_info;
+
+CREATE TABLE morphl.ga_epna_product_info (
+  client_id text,
+  day_of_data_capture date, 
+  session_id text, 
+  product_name text, 
+  date_hour_minute text, 
+  json_meta text, 
+  json_data text,
+  PRIMARY KEY ((client_id), day_of_data_capture, session_id, product_name)
+) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
+
+-- DROP TABLE IF EXISTS morphl.ga_epna_event_info;
+
+-- CREATE TABLE morphl.ga_epna_event_info (
+--   client_id text,
+--   day_of_data_capture date,
+--   session_id text,
+--   event_action text,
+--   event_category text,
+--   date_hour_minute text,
+--   PRIMARY KEY((client_id), day_of_data_capture, session_id, event_action, event_category, date_hour_minute)
+-- ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
+
+DROP TABLE IF EXISTS morphl.ga_epna_session_index;
+
+CREATE TABLE morphl.ga_epna_session_index (
+  client_id text,
+  day_of_data_capture date,
+  session_id text,
+  session_index int, 
+  PRIMARY KEY((client_id), day_of_data_capture, session_id)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
 DROP TABLE IF EXISTS morphl.ga_epnau_features_raw;
@@ -59,8 +94,6 @@ CREATE TABLE morphl.ga_epnau_features_raw (
     day_of_data_capture date,
     device_category text,
     browser text,
-    sessions double, 
-    bounces double, 
     revenue_per_user double,
     transactions_per_user double,
     PRIMARY KEY ((client_id), day_of_data_capture)
@@ -72,7 +105,6 @@ CREATE TABLE morphl.ga_epnas_features_raw (
   client_id text,
   day_of_data_capture date,
   session_id text, 
-  search_used text,
   days_since_last_session double,
   session_duration double, 
   unique_page_views double,
@@ -83,6 +115,7 @@ CREATE TABLE morphl.ga_epnas_features_raw (
   search_uniques double, 
   search_depth double,
   search_refinements double,
+  search_used text,
   PRIMARY KEY ((client_id), day_of_data_capture, session_id)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
@@ -92,12 +125,27 @@ CREATE TABLE morphl.ga_epnah_features_raw (
   client_id text,
   day_of_data_capture date,
   session_id text,
-  user_type text,
-  hit_id text, 
   date_hour_minute text,
   time_on_page double,
-  product_detail_views double,
-  PRIMARY KEY ((client_id), day_of_data_capture, session_id, hit_id)
+  PRIMARY KEY ((client_id), day_of_data_capture, session_id, date_hour_minute)
+) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
+
+DROP TABLE IF EXISTS morphl.ga_epnap_features_raw;
+
+CREATE TABLE morphl.ga_epnap_features_raw (
+  client_id text, 
+  day_of_data_capture date,
+  session_id text, 
+  date_hour_minute text,
+  product_name text, 
+  quantity_added_to_cart double, 
+  product_adds_to_cart double,
+  product_checkouts double, 
+  item_quantity double,
+  item_revenue double, 
+  product_detail_views double, 
+  cart_to_detail_rate double,
+  PRIMARY KEY ((client_id), day_of_data_capture, session_id, date_hour_minute, product_name )
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
 DROP TABLE IF EXISTS morphl.ga_epnau_features_filtered;
@@ -106,8 +154,7 @@ CREATE TABLE morphl.ga_epnau_features_filtered (
     client_id text,
     device_category text,
     browser text,
-    sessions double, 
-    bounces double, 
+    session_count int,
     revenue_per_user double,
     transactions_per_user double,
     mobile_device_branding text,
@@ -119,7 +166,6 @@ DROP TABLE IF EXISTS morphl.ga_epnas_features_filtered;
 CREATE TABLE morphl.ga_epnas_features_filtered (
   client_id text,
   session_id text, 
-  search_used text,
   days_since_last_session double,
   session_duration double, 
   unique_page_views double,
@@ -130,6 +176,8 @@ CREATE TABLE morphl.ga_epnas_features_filtered (
   search_uniques double, 
   search_depth double,
   search_refinements double,
+  search_used text,
+  session_index int, 
   PRIMARY KEY ((client_id), session_id)
 );
 
@@ -138,12 +186,16 @@ DROP TABLE IF EXISTS morphl.ga_epnah_features_filtered;
 CREATE TABLE morphl.ga_epnah_features_filtered (
   client_id text,
   session_id text,
-  hit_id text, 
   date_hour_minute text,
-  user_type text,
   time_on_page double,
   product_detail_views double,
-  PRIMARY KEY ((client_id),session_id, hit_id)
+  cart_to_detail_rate double,
+  item_quantity double, 
+  item_revenue double, 
+  product_adds_to_cart double, 
+  product_checkouts double, 
+  quantity_added_to_cart double,
+  PRIMARY KEY ((client_id),session_id, date_hour_minute)
 );
 
 DROP TABLE IF EXISTS morphl.ga_epna_shopping_stages_filtered;
@@ -155,55 +207,17 @@ CREATE TABLE morphl.ga_epna_shopping_stages_filtered (
   PRIMARY KEY((client_id), session_id)
 );
 
-DROP TABLE IF EXISTS morphl.ga_epna_data_hits;
+DROP TABLE IF EXISTS morphl.ga_epna_batch_inference_data;
 
-CREATE TABLE morphl.ga_epna_data_hits (
-  client_id text,
-  user_segment text,
-  session_count int, 
-  features frozen<list<frozen<list<frozen<list<double>>>>>>,
-  PRIMARY KEY((session_count), user_segment, client_id)
-) WITH CLUSTERING ORDER BY (user_segment ASC);
-
-DROP TABLE IF EXISTS morphl.ga_epna_data_sessions;
-
-CREATE TABLE morphl.ga_epna_data_sessions (
-  client_id text,
-  user_segment text,
-  session_count int,
-  features frozen<list<frozen<list<double>>>>,
-  PRIMARY KEY((session_count), user_segment, client_id)
-) WITH CLUSTERING ORDER BY (user_segment ASC);
-
-DROP TABLE IF EXISTS morphl.ga_epna_data_users;
-
-CREATE TABLE morphl.ga_epna_data_users (
-  client_id text,
-  user_segment text, 
-  session_count int, 
-  features frozen<list<double>>,
-  PRIMARY KEY((session_count), user_segment, client_id)
-) WITH CLUSTERING ORDER BY (user_segment ASC);
-
-DROP TABLE IF EXISTS morphl.ga_epna_data_num_hits;
-
-CREATE TABLE morphl.ga_epna_data_num_hits (
-  client_id text,
-  user_segment text,
-  session_count int,
+CREATE TABLE morphl.ga_epna_batch_inference_data (
+  client_id text, 
+  user_features frozen<list<double>>,
+  sessions_features  frozen<list<frozen<list<double>>>>,
+  hits_features frozen<list<frozen<list<frozen<list<double>>>>>>,
   sessions_hits_count frozen<list<int>>,
-  PRIMARY KEY((session_count), user_segment, client_id)
-) WITH CLUSTERING ORDER BY (user_segment ASC);
-
-DROP TABLE IF EXISTS morphl.ga_epna_data_shopping_stages;
-
-CREATE TABLE morphl.ga_epna_data_shopping_stages (
-  client_id text,
-  user_segment text, 
-  session_count int, 
   shopping_stages frozen<list<frozen<list<double>>>>,
-  PRIMARY KEY((session_count), user_segment, client_id)
-) WITH CLUSTERING ORDER BY (user_segment ASC);
+  PRIMARY KEY(client_id)
+);
 
 DROP TABLE IF EXISTS morphl.ga_epna_predictions;
 
@@ -246,6 +260,7 @@ CREATE TABLE morphl.ga_epna_predictions_statistics(
   transaction int,
   PRIMARY KEY((prediction_date))
 );
+
 DROP TABLE IF EXISTS morphl.ga_epna_config_parameters;
 
 CREATE TABLE morphl.ga_epna_config_parameters (
