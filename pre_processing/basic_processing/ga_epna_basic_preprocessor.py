@@ -27,7 +27,10 @@ class BasicPreprocessor:
         primary_key['ga_epnas_df'] = ['client_id',
                                       'day_of_data_capture', 'session_id']
         primary_key['ga_epnah_df'] = [
-            'client_id', 'day_of_data_capture', 'session_id', 'hit_id']
+            'client_id', 'day_of_data_capture', 'session_id', 'date_hour_minute']
+
+        primary_key['ga_epnap_df'] = ['client_id', 'day_of_data_capture',
+                                      'session_id', 'product_name', 'date_hour_minute']
 
         self.primary_key = primary_key
 
@@ -37,8 +40,6 @@ class BasicPreprocessor:
         field_baselines = {}
 
         # device_category: the type of device associated to the user: tablet, mobile or desktop;
-        # sessions: the number of sessions a user has;
-        # bounces: the number of bounced sessions a user has;
         # browser: the type of browser used by a user;
         # revenue_per_user: the amount of money a user has spent on the site;
         # transactions_per_user: the number of transactions a user completed on the site.
@@ -46,14 +47,6 @@ class BasicPreprocessor:
             {'field_name': 'device_category',
              'original_name': 'ga:deviceCategory',
              'needs_conversion': False,
-             },
-            {'field_name': 'sessions',
-             'original_name': 'ga:sessions',
-             'needs_conversion': True,
-             },
-            {'field_name': 'bounces',
-             'original_name': 'ga:bounces',
-             'needs_conversion': True,
              },
             {'field_name': 'browser',
              'original_name': 'ga:browser',
@@ -79,7 +72,7 @@ class BasicPreprocessor:
         # search_depth: total number of subsequent page views made after an internal search;
         # search_refinements: the number of times a transition occurs between internal keywords search within a session
         #                     ex: "shoes", "shoes", "pants", "pants" => 1 transition from shoes to pants
-        # search_used: a boolean representing wether an internal search used in a session;
+        # search_used: either Visits With Site Search or Visits Without Site Search;
         # days_since_last_session: the number of days elapsed since the last sessions.
         field_baselines['ga_epnas_df'] = [
             {'field_name': 'session_duration',
@@ -137,18 +130,45 @@ class BasicPreprocessor:
              'original_name': 'ga:timeOnPage',
              'needs_conversion': True,
              },
-            {'field_name': 'user_type',
-             'original_name': 'ga:userType',
-             'needs_conversion': False,
+        ]
+
+
+        # quantity_added_to_cart: number of product units added to the shopping cart ;
+        # product_adds_to_cart: number of times a product was added to the shopping cart;
+        # product_checkouts: number of times a product was included in the check-out process;
+        # item_quantity: number of items purchased;
+        # item_revenue: total revenue from purchased product items;
+        # cart_to_detail_rate: product adds divided by views of product details;
+        # product_detail_views: number of times users viewed the product-detail page.
+        field_baselines['ga_epnap_df'] = [
+            {'field_name': 'quantity_added_to_cart',
+             'original_name': 'ga:quantityAddedToCart',
+             'needs_conversion': True,
+             },
+            {'field_name': 'product_adds_to_cart',
+             'original_name': 'ga:productAddsToCart',
+             'needs_conversion': True,
+             },
+            {'field_name': 'product_checkouts',
+             'original_name': 'ga:productCheckouts',
+             'needs_conversion': True,
+             },
+            {'field_name': 'item_quantity',
+             'original_name': 'ga:itemQuantity',
+             'needs_conversion': True,
+             },
+            {'field_name': 'item_revenue',
+             'original_name': 'ga:itemRevenue',
+             'needs_conversion': True,
+             },
+            {'field_name': 'cart_to_detail_rate',
+             'original_name': 'ga:cartToDetailRate',
+             'needs_conversion': True,
              },
             {'field_name': 'product_detail_views',
              'original_name': 'ga:productDetailViews',
              'needs_conversion': True,
-             },
-            {'field_name': 'date_hour_minute',
-             'original_name': 'ga:dateHourMinute',
-             'needs_conversion': False,
-             },
+             }
         ]
 
         self.field_baselines = field_baselines
@@ -258,7 +278,24 @@ class BasicPreprocessor:
             .select(f.col('client_id'),
                     f.col('day_of_data_capture'),
                     f.col('session_id'),
-                    f.col('hit_id'),
+                    f.col('date_hour_minute'),
+                    f.col('jmeta.dimensions').alias('jmeta_dimensions'),
+                    f.col('jmeta.metrics').alias('jmeta_metrics'),
+                    f.col('jdata.dimensions').alias('jdata_dimensions'),
+                    f.col('jdata.metrics').alias('jdata_metrics')))
+
+
+        after_json_parsing_df['ga_epnap_df'] = (
+            dataframes['ga_epnap_df']
+            .withColumn('jmeta', f.from_json(
+                f.col('json_meta'), json_schemas['ga_epnap_df']['json_meta_schema']))
+            .withColumn('jdata', f.from_json(
+                f.col('json_data'), json_schemas['ga_epnap_df']['json_data_schema']))
+            .select(f.col('client_id'),
+                    f.col('day_of_data_capture'),
+                    f.col('session_id'),
+                    f.col('date_hour_minute'),
+                    f.col('product_name'),
                     f.col('jmeta.dimensions').alias('jmeta_dimensions'),
                     f.col('jmeta.metrics').alias('jmeta_metrics'),
                     f.col('jdata.dimensions').alias('jdata_dimensions'),
@@ -325,7 +362,7 @@ class BasicPreprocessor:
                 'schema_as_list': schema_as_list}
 
     # Save the raw dfs to Cassandra tables.
-    def save_raw_data(self, user_data, session_data, hit_data):
+    def save_raw_data(self, user_data, session_data, hit_data, product_data):
 
         save_options_ga_epnau_features_raw = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
@@ -338,6 +375,10 @@ class BasicPreprocessor:
         save_options_ga_epnah_features_raw = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
             'table': ('ga_epnah_features_raw')
+        }
+        save_options_ga_epnap_features_raw = {
+            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
+            'table': ('ga_epnap_features_raw')
         }
 
         (user_data
@@ -359,6 +400,13 @@ class BasicPreprocessor:
             .format('org.apache.spark.sql.cassandra')
             .mode('append')
             .options(**save_options_ga_epnah_features_raw)
+            .save())
+
+        (product_data
+            .write
+            .format('org.apache.spark.sql.cassandra')
+            .mode('append')
+            .options(**save_options_ga_epnap_features_raw)
             .save())
 
     def main(self):
@@ -386,6 +434,10 @@ class BasicPreprocessor:
         ga_epna_hits_df = self.fetch_from_cassandra(
             'ga_epna_hits', spark_session)
 
+        ga_epna_product_info_df = self.fetch_from_cassandra(
+            'ga_epna_product_info', spark_session
+        )
+
         dataframes = {}
 
         # Filter them by the date we need.
@@ -401,6 +453,10 @@ class BasicPreprocessor:
             ga_epna_hits_df
             .filter("day_of_data_capture >= '{}'".format(start_date)))
 
+        dataframes['ga_epnap_df'] = (
+            ga_epna_product_info_df
+            .filter("day_of_data_capture >= '{}'".format(start_date)))
+
         json_schemas = {}
 
         # Get each df's json schema.
@@ -410,6 +466,8 @@ class BasicPreprocessor:
             dataframes['ga_epnas_df'], spark_session)
         json_schemas['ga_epnah_df'] = self.get_json_schemas(
             dataframes['ga_epnah_df'], spark_session)
+        json_schemas['ga_epnap_df'] = self.get_json_schemas(
+            dataframes['ga_epnap_df'], spark_session)
 
         after_json_parsing_df = self.get_parsed_jsons(json_schemas, dataframes)
 
@@ -425,13 +483,22 @@ class BasicPreprocessor:
                                                      self.primary_key['ga_epnah_df'],
                                                      self.field_baselines['ga_epnah_df'])
 
+
+        processed_products_dict = self.process_json_data(after_json_parsing_df['ga_epnap_df'],
+                                                     self.primary_key['ga_epnap_df'],
+                                                     self.field_baselines['ga_epnap_df'])
+                                    
+                                    
+
         users_df = processed_users_dict['result_df']
 
         sessions_df = processed_sessions_dict['result_df']
 
         hits_df = processed_hits_dict['result_df']
 
-        self.save_raw_data(users_df, sessions_df, hits_df)
+        products_df = processed_products_dict['result_df']
+
+        self.save_raw_data(users_df, sessions_df, hits_df, products_df)
 
 
 if __name__ == '__main__':

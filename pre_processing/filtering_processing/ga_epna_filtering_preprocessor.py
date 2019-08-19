@@ -42,8 +42,6 @@ def get_spark_session():
     return spark_session
 
 # Return a spark dataframe from a specified Cassandra table.
-
-
 def fetch_from_cassandra(c_table_name, spark_session):
 
     load_options = {
@@ -58,7 +56,7 @@ def fetch_from_cassandra(c_table_name, spark_session):
     return df
 
 
-# Formats the stages column so that 
+# Formats the stages column so that
 # we keep relevant stages and give them a standard format for one hot encoding.
 def format_and_filter_shopping_stages(stages):
 
@@ -87,8 +85,50 @@ def format_and_filter_shopping_stages(stages):
 
 # Filters the data and makes sure that the client_ids we make predictions on
 # have data in all relevant tables.
-def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits_df):
+def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits_df, product_info_df, session_index_df):
 
+    # Add product info to hits and replace missing values with 0.0
+    hits_df = (hits_df
+               .join(
+                   product_info_df.drop('product_name'),
+                   ['client_id',
+                    'session_id',
+                    'day_of_data_capture',
+                    'date_hour_minute'
+                    ],
+                   'left_outer'
+               )
+               .fillna(
+                   0.0,
+                   [
+                       'product_detail_views',
+                       'cart_to_detail_rate',
+                       'item_quantity',
+                       'item_revenue',
+                       'product_adds_to_cart',
+                       'product_checkouts',
+                       'quantity_added_to_cart'
+                   ]
+               )
+               .repartition(32)
+               )
+
+    # Get the number of sessions a user has
+    user_session_counts = session_index_df.groupBy(
+        'client_id').agg(f.max('session_index').alias('session_count'))
+
+    # Add the session count column to the users dataframe
+    users_df = users_df.join(
+        user_session_counts, 'client_id', 'inner').repartition(32)
+
+    sessions_df = (sessions_df
+                   .join(
+                       session_index_df.drop('day_of_data_capture'),
+                       ['client_id', 'session_id'],
+                       'inner'
+                   )
+                   .repartition(32)
+                   )
 
     # Get the session ids that are present in all tables.
     sessions_df_session_ids = sessions_df.select('session_id').distinct()
@@ -104,7 +144,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                                 shopping_stages_df_session_ids
                             )
                             )
-    
+
     # Will be reused multiple times so caching will improve performance.
     complete_session_ids.cache()
 
@@ -114,8 +154,8 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                                           join(complete_session_ids,
                                                'session_id', 'inner')
                                           )
-    
-    # Only keep hits that we have hopping stage and session data for.
+
+    # Only keep hits that we have stage and session data for.
     hits_filtered_by_session_id_df = (hits_df.
                                       drop('day_of_data_capture').
                                       join(complete_session_ids,
@@ -128,7 +168,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                                                  join(complete_session_ids,
                                                       'session_id', 'inner')
                                                  )
-    
+
     # Get all the ids that have the required shopping stages.
     client_ids_with_stages = (shopping_stages_filtered_by_session_id_df.
                               select('client_id')
@@ -139,7 +179,8 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
     client_ids_users = users_df.select('client_id').distinct()
     client_ids_sessions = sessions_filtered_by_session_id_df.select(
         'client_id').distinct()
-    client_ids_hits = hits_filtered_by_session_id_df.select('client_id').distinct()
+    client_ids_hits = hits_filtered_by_session_id_df.select(
+        'client_id').distinct()
 
     # Get client_ids that exist in all dfs.
     complete_client_ids = (client_ids_users
@@ -165,7 +206,6 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
 
     filtered_users_df.repartition(32)
 
-  
     filtered_mobile_brand_df = (mobile_brand_df.
                                 drop('day_of_data_capture', 'sessions').
                                 join(complete_client_ids,
@@ -200,12 +240,11 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                                f.first('device_category').alias(
                                    'device_category'),
                                f.first('browser').alias('browser'),
-                               f.sum('bounces').alias('bounces'),
-                               f.sum('sessions').alias('sessions'),
                                f.sum('revenue_per_user').alias(
                                    'revenue_per_user'),
                                f.sum('transactions_per_user').alias(
-                                   'transactions_per_user')
+                                   'transactions_per_user'),
+                               f.first('session_count').alias('session_count')
                            )
                            )
 
@@ -235,7 +274,6 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
     # Group shopping stages per session into a set.
     final_shopping_stages_df = (shopping_stages_filtered_by_session_id_df.
                                 join(complete_client_ids, 'client_id', 'inner').
-                                orderBy('session_id').
                                 groupBy('session_id').
                                 agg(f.first('client_id').alias('client_id'),
                                     f.collect_set('shopping_stage').alias(
@@ -337,13 +375,21 @@ def main():
     shopping_stages_df = fetch_from_cassandra(
         'ga_epna_sessions_shopping_stages', spark_session)
 
+    ga_epnap_features_raw = fetch_from_cassandra(
+        'ga_epnap_features_raw', spark_session)
+
+    session_index_df = fetch_from_cassandra(
+        'ga_epna_session_index', spark_session)
+
     # Get all the filtered dfs.
     filtered_data_dfs = (filter_data(
         ga_epnau_features_raw_df,
         mobile_brand_df,
         ga_epnas_features_filtered_df,
         shopping_stages_df,
-        ga_epnah_features_raw
+        ga_epnah_features_raw,
+        ga_epnap_features_raw,
+        session_index_df
     ))
 
     save_filtered_data(

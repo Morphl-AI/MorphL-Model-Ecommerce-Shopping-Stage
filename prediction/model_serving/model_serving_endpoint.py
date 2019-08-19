@@ -125,7 +125,15 @@ def get_prediction(client_id):
         return jsonify(status=0, error='No associated predictions found for that ID.')
 
     del p[0]['client_id']
-    return jsonify(status=1, prediction={'client_id': client_id, 'shopping_stages': p[0]})
+    return jsonify(status=1, prediction={'client_id': client_id, 'shopping_stages': {
+        'all_visits': round(p[0]['all_visits'], 4),
+        'product_view': round(p[0]['product_view'], 4),
+        'add_to_cart': round(p[0]['add_to_cart'], 4),
+        'checkout_with_add_to_cart': round(p[0]['checkout_with_add_to_cart'], 4),
+        'checkout_without_add_to_cart': round(p[0]['checkout_without_add_to_cart'], 4),
+        'transaction': round(p[0]['transaction'], 4),
+        'prediction_date': str(p[0]['prediction_date'])
+    }})
 
 
 if __name__ == '__main__':

@@ -1,8 +1,6 @@
 from os import getenv
-import numpy as np
 
-from pyspark.sql import SparkSession
-from pyspark.sql import Window, functions as f
+from pyspark.sql import SparkSession, Window, functions as f
 
 from cassandra.cluster import Cluster
 from cassandra.auth import PlainTextAuthProvider
@@ -40,7 +38,6 @@ class ModelLSTM_V1(nn.Module):
         self.hyperParameters = hyperParameters
 
         self.appendPreviousOutput = hyperParameters["appendPreviousOutput"]
-        self.outputType = hyperParameters["outputType"]
         baseNeurons = hyperParameters["baseNeurons"]
         self.hidenShape2 = baseNeurons + int(inputShape[1]) + outputShape \
             if self.appendPreviousOutput else baseNeurons + int(inputShape[1])
@@ -215,10 +212,8 @@ class ModelLSTM_V1(nn.Module):
         y1 = F.relu(self.fc1(sess_hidden))
         y2 = self.fc2(y1)
 
-        if self.outputType == "classification":
-            y3 = F.softmax(y2, dim=-1)
-        else:
-            y3 = tr.sigmoid(y2)
+        y3 = tr.sigmoid(y2)
+        
         return y3
 
     def computeHiddens(self, trInputs):
@@ -270,23 +265,23 @@ def insert_statistics(statistics):
         username=MORPHL_CASSANDRA_USERNAME,
         password=MORPHL_CASSANDRA_PASSWORD
     )
-    
+
     cluster = Cluster(
         [MORPHL_SERVER_IP_ADDRESS], auth_provider=auth_provider)
-    
+
     spark_session_cass = cluster.connect(MORPHL_CASSANDRA_KEYSPACE)
-    
+
     insert_sql_parts = [
         'INSERT INTO ga_epna_predictions_statistics ',
-        '(prediction_date, total_predictions, all_visits, product_view, checkout_with_add_to_cart,', 
+        '(prediction_date, total_predictions, all_visits, product_view, checkout_with_add_to_cart,',
         'transaction, add_to_cart, checkout_without_add_to_cart)'
         'VALUES (?,?,?,?,?,?,?,?)',
     ]
-    
+
     insert_sql = ' '.join(insert_sql_parts)
-    
+
     prep_stmt_statistics = spark_session_cass.prepare(insert_sql)
-    
+
     bind_list = [
         PREDICTION_DAY_AS_STR,
         statistics['total_predictions'],
@@ -297,8 +292,49 @@ def insert_statistics(statistics):
         statistics['add_to_cart'],
         statistics['checkout_without_add_to_cart']
     ]
-    
-    spark_session_cass.execute(prep_stmt_statistics, bind_list, timeout=CASS_REQ_TIMEOUT)
+
+    spark_session_cass.execute(
+        prep_stmt_statistics, bind_list, timeout=CASS_REQ_TIMEOUT)
+
+# Map function that makes a prediction for each user
+def get_predictions(row):
+
+    # Get all the relevant numpy arrays
+    sessions_array = np.array([row.sessions_features]).astype(np.float32)
+    hits_array = np.array([row.hits_features]).astype(np.float32)
+    user_array = np.array([row.user_features]).astype(np.float32)
+    sessions_hits_count_array = np.array([row.sessions_hits_count])
+    shopping_stages = np.array([row.shopping_stages]).astype(np.float32)
+
+    # Input the numpy arrays into the modle
+    result = model.npForward({"dataSessions": sessions_array,
+                              "dataHits": hits_array,
+                              "dataUsers": user_array,
+                              "dataNumItems": sessions_hits_count_array,
+                              "dataShoppingStage": shopping_stages})
+
+    # Only keep the prediction for the most recent session
+    result = result[0][-1]
+
+    # Convert the result to a normal list of python floats
+    result = [float(i) for i in result.tolist()]
+
+    # Return the new row to the dataframe
+    return (row.client_id, result[0], result[1], result[2], result[3], result[4], result[5] ,PREDICTION_DAY_AS_STR)
+
+
+
+
+# Load the model
+model = ModelLSTM_V1(inputShape=(8, 14, 8), outputShape=6, hyperParameters={"randomizeSessionSize": True,
+                                                                             "appendPreviousOutput": True,
+                                                                             "baseNeurons": 30,
+                                                                             "lookaheadSessions": 1,
+                                                                             'normalization': 'min_max',
+                                                                             'inShape': (8, 14, 8),
+                                                                             "attributionModeling": "linear"})
+# Load the model weights.
+model.loadWeights('/opt/models/ga_epna_model_weights.pkl')
 
 def main():
     spark_session = (
@@ -322,154 +358,58 @@ def main():
     current_day_ids = users_ingested.select('client_id').where(
         "day_of_data_capture = '{}'".format(PREDICTION_DAY_AS_STR))
 
-    # Get all the data filtered by the client ids from the current day.
-    sessions = fetch_from_cassandra(
-        'ga_epna_data_sessions', spark_session).join(current_day_ids, 'client_id', 'inner')
-    hits = fetch_from_cassandra(
-        'ga_epna_data_hits', spark_session).join(current_day_ids, 'client_id', 'inner')
-    users = fetch_from_cassandra(
-        'ga_epna_data_users', spark_session).join(current_day_ids, 'client_id', 'inner')
-    num_items = fetch_from_cassandra(
-        'ga_epna_data_num_hits', spark_session).join(current_day_ids, 'client_id', 'inner')
-    shopping_stage = fetch_from_cassandra(
-        'ga_epna_data_shopping_stages', spark_session).join(current_day_ids, 'client_id', 'inner')
+    # Load the batch inference data from Cassandra and filter it by the client ids from the prediction date
+    batch_inference_data = fetch_from_cassandra('ga_epna_batch_inference_data', spark_session).join(
+        current_day_ids, 'client_id', 'inner')
 
-    # Load the model.
-    model = ModelLSTM_V1(inputShape=(9, 12, 2), outputShape=6, hyperParameters={"randomizeSessionSize": True,
-                                                                                "appendPreviousOutput": True,
-                                                                                "baseNeurons": 30,
-                                                                                "outputType": "regression",
-                                                                                'normalization': 'min_max',
-                                                                                'inShape': (9, 12, 2),
-                                                                                "attributionModeling": "linear"})
-    # Load the model weights.
-    model.loadWeights('/opt/models/ga_epna_model_weights.pkl')
+    # Convert the dataframe to an rdd so we can apply the mapping function to it
+    ga_epna_predictions = (
+        batch_inference_data.
+        rdd.
+        map(get_predictions).
+        repartition(32)
+        .toDF([
+            'client_id',
+            'all_visits',
+            'product_view',
+            'add_to_cart',
+            'checkout_with_add_to_cart',
+            'checkout_without_add_to_cart',
+            'transaction',
+            'prediction_date',
+        ])
+    )
 
-    # Get the max session count for the current day.
-    max_session_count = users.agg({'session_count': 'max'}).collect()[0][0]
+    # Cache the df since we will run multiple queries on it 
+    ga_epna_predictions.cache()
 
+    # Calculate all the probability statistics
     statistics = {
-        'add_to_cart': 0,
-        'all_visits': 0,
-        'checkout_with_add_to_cart': 0,
-        'checkout_without_add_to_cart': 0,
-        'product_view': 0,
-        'transaction': 0,
-        'total_predictions': 0
+        'total_predictions': ga_epna_predictions.count(),
+        'all_visits': ga_epna_predictions.where("all_visits > 0.5").count(),
+        'product_view': ga_epna_predictions.where("product_view > 0.5").count(),
+        'add_to_cart': ga_epna_predictions.where("add_to_cart > 0.5").count(),
+        'checkout_with_add_to_cart': ga_epna_predictions.where("checkout_with_add_to_cart > 0.5").count(),
+        'checkout_without_add_to_cart': ga_epna_predictions.where("checkout_without_add_to_cart > 0.5").count(),
+        'transaction': ga_epna_predictions.where("transaction > 0.5").count(),
     }
 
-    # Start a for loop through tall the session counts.
-    for session_count in range(1, max_session_count + 1):
-        # For the first 4 session count segments, we go take the data in smaller chunnks
-        # since most users are found in this range. For all other session counts, we can
-        # take the data in larger chunks Ex: 'GA10' <=  user_segment < 'GA30' vs.
-        # 'GA10' <= user_segment < 'GA15'
-        segment_range = range(
-            10, 95, 5) if session_count < 5 else range(10, 100, 20)
+    # Save the statistics to Cassandra 
+    insert_statistics(statistics)
 
-        for segment_limit in segment_range:
+    # Save the predictions to Cassandra
+    save_options_ga_epna_predictions = {
+        'keyspace': MORPHL_CASSANDRA_KEYSPACE,
+        'table': ('ga_epna_predictions')
+    }
 
-            lower_limit = 'GA' + str(segment_limit)
-            upper_limit = 'GA' + \
-                str(segment_limit + 5) if session_count < 5 else 'GA' + str(segment_limit + 20) 
-
-            condition_string = "session_count = {} and user_segment >= '{}' and user_segment < '{}'".format(
-                session_count, lower_limit, upper_limit)
-
-            if segment_limit == 90:
-
-                condition_string = "session_count = {} and user_segment >= 'GA90'".format(
-                    session_count)
-
-            filtered_users_df = users.filter(condition_string)
-
-            # If there are no users with this session count, skip.
-            if len(filtered_users_df.head(1)) == 0:
-                continue
-
-            # Add an index to the the data ordered by client_id.
-            order_df = (filtered_users_df.
-                        select('client_id').
-                        withColumn(
-                            'index',
-                            f.row_number().over(Window.orderBy('client_id')) - 1
-                        )
-                        )
-
-            # Collect all the data as numpy arrays.
-            users_array = np.array(filtered_users_df.orderBy('client_id').select(
-                'features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
-
-            sessions_array = np.array(sessions.filter(condition_string).orderBy('client_id').select(
-                'features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
-
-            hits_array = np.array(hits.filter(condition_string).orderBy('client_id').select(
-                'features').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
-
-            num_items_array = np.array(num_items.filter(condition_string).orderBy(
-                'client_id').select('sessions_hits_count').rdd.flatMap(lambda x: x).collect())
-
-            shopping_stage_array = np.array(shopping_stage.filter(condition_string).orderBy(
-                'client_id').select('shopping_stages').rdd.flatMap(lambda x: x).collect()).astype(np.float32)
-
-            # Get the results from the model.
-            result = model.npForward({"dataSessions": sessions_array,
-                                      "dataHits": hits_array,
-                                      "dataUsers": users_array,
-                                      "dataNumItems": num_items_array,
-                                      "dataShoppingStage": shopping_stage_array})
-            # The results contain predictions for al sessions, we only want to keep
-            # the last one.
-            result = np.delete(
-                result, np.s_[:session_count - 1], axis=1).reshape(result.shape[0], 6)
-
-            # Converts the float 'index' to int.
-            to_int_udf = f.udf(lambda x: int(x), 'int')
-
-            # Use zipWithIndex so that we keep the order of the results while entering them
-            # into a df.
-            result_df = (
-                spark_session.
-                sparkContext.
-                parallelize(result).
-                zipWithIndex().
-                map(lambda x: [float(item) for item in x[0]] + [float(x[1])]).
-                toDF([
-                    'all_visits',
-                    'product_view',
-                    'checkout_with_add_to_cart',
-                    'transaction',
-                    'add_to_cart',
-                    'checkout_without_add_to_cart',
-                    'index'
-                ]).
-                withColumn('index', to_int_udf('index')).
-                join(order_df, 'index', 'inner').
-                drop('index').
-                withColumn('prediction_date', f.lit(PREDICTION_DAY_AS_STR)).
-                repartition(32)
-            )
-
-            for stage, count in statistics.items():
-                if stage == 'total_predictions':
-                    statistics[stage] = count + result_df.count()
-                else:
-                    statistics[stage] = count + result_df.where("{} > 0.5".format(stage)).count()
-
-            save_options_ga_epna_predictions = {
-                'keyspace': MORPHL_CASSANDRA_KEYSPACE,
-                'table': ('ga_epna_predictions')
-            }
-
-            (result_df.
-             write.
-             format('org.apache.spark.sql.cassandra').
-             mode('append').
-             options(**save_options_ga_epna_predictions).
-             save()
-             )
-
-            insert_statistics(statistics)
+    (ga_epna_predictions.
+     write.
+     format('org.apache.spark.sql.cassandra').
+     mode('append').
+     options(**save_options_ga_epna_predictions).
+     save()
+     )
 
 
 if __name__ == '__main__':
