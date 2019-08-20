@@ -18,7 +18,6 @@ MORPHL_CASSANDRA_KEYSPACE = getenv('MORPHL_CASSANDRA_KEYSPACE')
 HDFS_DIR_USER_FILTERED = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnau_filtered'
 HDFS_DIR_SESSION_FILTERED = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnas_filtered'
 HDFS_DIR_HIT_FILTERED = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnah_filtered'
-HDFS_DIR_STAGES_FILTERED = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epna_shopping_stages_filtered'
 
 # Initialize the spark sessions and return it.
 
@@ -132,9 +131,7 @@ def clip(value):
 # Normalizes hit data.
 def min_max_hits(hit_features):
     # Max and min used when training for each feature
-    # ['time_on_page', 'product_detail_views', 'cart_to_detail_rate', 'item_quantity', 'item_revenue',
-    #  'product_adds_to_cart', 'product_checkouts', 'quantity_added_to_cart'
-    # ]
+    # ['time_on_page', 'product_detail_views']
     min = [0.0, 0.0]
     max = [1495.0, 2.0]
 
@@ -144,8 +141,6 @@ def min_max_hits(hit_features):
     return hit_features
 
 # Normalizes session data.
-
-
 def min_max_sessions(session_features):
     # Max and min used when training for each feature.
     # ['session_duration', 'unique_pageviews', 'days_since_last_session',
@@ -161,8 +156,6 @@ def min_max_sessions(session_features):
     return session_features
 
 # Normalizes user data.
-
-
 def min_max_users(users_features):
     # Max and min values used when training for each feature.
     # [ 'session_count', 'device_transactions_per_user', 'device_revenue_per_transaction', 'browser_transactions_per_user',
@@ -191,8 +184,6 @@ def pad_with_zero(hits_features):
 
 
 # Save array data to Cassandra.
-
-
 def save_data(hits_data, hits_num_data, session_data, user_data):
 
     ga_epna_batch_inference_data = (hits_data
@@ -230,13 +221,11 @@ def main():
     ga_epnah_features_filtered_df = spark_session.read.parquet(
         HDFS_DIR_HIT_FILTERED)
 
-    ga_epna_shopping_stages_filtered_df = spark_session.read.parquet(
-        HDFS_DIR_STAGES_FILTERED
-    )
-
     # Calculate revenue by device and revenue by browser columns
     users_df = calculate_browser_device_features(
         ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
+
+    ga_epnas_features_filtered_df = ga_epnas_features_filtered_df.drop('transactions', 'transaction_revenue')
 
     # Initialize udfs
     min_maxer_hits = f.udf(min_max_hits, ArrayType(DoubleType()))
@@ -378,67 +367,6 @@ def main():
                           .withColumn('user_features', min_maxer_users('user_features'))
                           .repartition(32)
                           )
-
-    # # Get the shopping stages arrays
-    # # user[
-    # #       session[stages],
-    # #       session[stages]
-    # # ]
-
-    # stages_window_by_users = Window.partitionBy(
-    #     'client_id').orderBy('session_id')
-
-    # ga_epna_data_shopping_stages = (ga_epna_shopping_stages_filtered_df.
-    #                                 withColumn(
-    #                                     'shopping_stage_1', f.when(
-    #                                         f.col('shopping_stage') == 'ALL_VISITS', 1.0).otherwise(0.0)
-    #                                 ).
-    #                                 withColumn(
-    #                                     'shopping_stage_2', f.when(
-    #                                         f.col('shopping_stage') == 'ALL_VISITS|PRODUCT_VIEW', 1.0).otherwise(0.0)
-    #                                 ).
-    #                                 withColumn(
-    #                                     'shopping_stage_3', f.when(
-    #                                         f.col('shopping_stage') == 'ADD_TO_CART|ALL_VISITS|PRODUCT_VIEW', 1.0).otherwise(0.0)
-    #                                 ).
-    #                                 withColumn(
-    #                                     'shopping_stage_4', f.when(
-    #                                         f.col('shopping_stage') == 'ADD_TO_CART|ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 1.0).otherwise(0.0)
-    #                                 ).
-    #                                 withColumn(
-    #                                     'shopping_stage_5', f.when(
-    #                                         f.col('shopping_stage') == 'ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 1.0).otherwise(0.0)
-    #                                 ).
-    #                                 withColumn('shopping_stage_6', f.when(
-    #                                     f.col('shopping_stage') == 'TRANSACTION', 1.0).otherwise(0.0)
-    #                                 )
-    #                                 .select(
-    #                                     'client_id',
-    #                                     'session_id',
-    #                                     f.array(
-    #                                         f.col('shopping_stage_2'),
-    #                                         f.col('shopping_stage_1'),
-    #                                         f.col('shopping_stage_3'),
-    #                                         f.col('shopping_stage_6'),
-    #                                         f.col('shopping_stage_4'),
-    #                                         f.col('shopping_stage_5'),
-    #                                     ).alias('shopping_stage')
-    #                                 ).
-    #                                 withColumn('shopping_stage', f.collect_list('shopping_stage').over(stages_window_by_users)).
-    #                                 groupBy('client_id').
-    #                                 agg(
-    #                                     f.last('shopping_stage').alias(
-    #                                         'shopping_stages')
-    #                                 ).
-    #                                 repartition(32)
-    #                                 )
-
-    # Get the number of hits arrays
-    # user[
-    #     numHitsSession1,
-    #     numHitsSession2,
-    #     numHitsSession3
-    # ]
 
     num_hits_window_by_user = Window.partitionBy(
         'client_id').orderBy('session_id')
