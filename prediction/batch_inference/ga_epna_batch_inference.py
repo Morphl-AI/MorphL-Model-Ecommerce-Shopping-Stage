@@ -29,26 +29,25 @@ device = tr.device("cuda") if tr.cuda.is_available() else tr.device("cpu")
 # Model class used for predictions.
 
 
-class ModelLSTM_V1(nn.Module):
-    def __init__(self, inputShape, outputShape, hyperParameters={}, **kwargs):
+class ModelTargetabilityRNN(nn.Module):
+    def __init__(self, inputShape, hyperParameters={}, **kwargs):
         super().__init__(**kwargs)
 
         assert type(hyperParameters) == dict
 
         self.hyperParameters = hyperParameters
 
-        self.appendPreviousOutput = hyperParameters["appendPreviousOutput"]
-        baseNeurons = hyperParameters["baseNeurons"]
-        self.hidenShape2 = baseNeurons + int(inputShape[1]) + outputShape \
-            if self.appendPreviousOutput else baseNeurons + int(inputShape[1])
+        self.hiddenShape1 = hyperParameters["hiddenShape1"]
+        self.inShape2 = self.hiddenShape1 + int(inputShape[1])
+        self.hiddenShape2 = hyperParameters["hiddenShape2"]
 
         self.lstm1 = nn.LSTM(input_size=int(
-            inputShape[2]), hidden_size=baseNeurons, num_layers=1)
-        self.lstm2 = nn.LSTM(input_size=self.hidenShape2,
-                             hidden_size=baseNeurons, num_layers=1)
-        self.fc1 = nn.Linear(in_features=baseNeurons +
-                             int(inputShape[0]), out_features=baseNeurons)
-        self.fc2 = nn.Linear(in_features=baseNeurons, out_features=outputShape)
+            inputShape[2]), hidden_size=self.hiddenShape1, num_layers=1)
+        self.lstm2 = nn.LSTM(input_size=self.inShape2,
+                             hidden_size=self.hiddenShape2, num_layers=1)
+        self.fc1 = nn.Linear(in_features=self.hiddenShape2 +
+                             int(inputShape[0]), out_features=self.hiddenShape2)
+        self.fc2 = nn.Linear(in_features=self.hiddenShape2, out_features=2)
 
     def doLoadWeights(self, loadedState):
         if not "weights" in loadedState and "params" in loadedState:
@@ -181,39 +180,22 @@ class ModelLSTM_V1(nn.Module):
 
         # Append the features of previous session
         X = trInputs["dataSessions"].transpose(0, 1).float()
-        X[1:] = X[0: -1]
-        X[0] *= 0
+
         hiddens = tr.cat([X, hiddens], dim=-1)
         # print(hiddens.shape)
 
-        # If using previous shopping stage as part of the hidden state, then we need to append it to the hidden state
-        #  vector. However, we need to append it accordingly (i.e. the output of session 0 to the hidden state of 1,
-        #  output of session 2 to the input state of 1 etc. The first session has a zeroed entry (no previous session).
-        if self.appendPreviousOutput:
-            X = trInputs["dataShoppingStage"].transpose(0, 1).float()
-            X[1:] = X[0: -1]
-            X[0] *= 0
-            hiddens = tr.cat([X, hiddens], dim=-1)
-        # print(hiddens.shape)
-
         # [0] is the hidden state.
-        sess_hidden = self.lstm2(hiddens, None)[0]
+        sess_hidden = self.lstm2(hiddens, None)[0][-1]
         # print(sess_hidden.shape)
 
         # Append user features
         X = trInputs["dataUsers"].float()
-        Y = tr.ones(sess_hidden.shape[0], *
-                    X.shape).to(device).requires_grad_(False)
-        Y = Y * X
-        sess_hidden = tr.cat([Y, sess_hidden], dim=-1)
-        # print(sess_hidden.shape)
+        user_sess_hidden = tr.cat([X, sess_hidden], dim=-1)
 
-        sess_hidden = sess_hidden.transpose(0, 1)
-        y1 = F.relu(self.fc1(sess_hidden))
+        y1 = F.relu(self.fc1(user_sess_hidden))
         y2 = self.fc2(y1)
+        y3 = F.softmax(y2, dim=1)
 
-        y3 = tr.sigmoid(y2)
-        
         return y3
 
     def computeHiddens(self, trInputs):
@@ -227,6 +209,7 @@ class ModelLSTM_V1(nn.Module):
             trSessData = trData[:, t_sessions]
             trSessNums = trNums[:, t_sessions]
             trSessData = tr.transpose(trSessData, 0, 1)
+
             _, prevHidden = self.lstm1(trSessData[0: 1], None)
             mask = tr.ones(prevHidden[0].shape).to(
                 device).requires_grad_(False)
@@ -273,9 +256,8 @@ def insert_statistics(statistics):
 
     insert_sql_parts = [
         'INSERT INTO ga_epna_predictions_statistics ',
-        '(prediction_date, total_predictions, all_visits, product_view, checkout_with_add_to_cart,',
-        'transaction, add_to_cart, checkout_without_add_to_cart)'
-        'VALUES (?,?,?,?,?,?,?,?)',
+        '(prediction_date, total_predictions, targetable, untargetable)'
+        'VALUES (?,?,?,?)',
     ]
 
     insert_sql = ' '.join(insert_sql_parts)
@@ -285,12 +267,8 @@ def insert_statistics(statistics):
     bind_list = [
         PREDICTION_DAY_AS_STR,
         statistics['total_predictions'],
-        statistics['all_visits'],
-        statistics['product_view'],
-        statistics['checkout_with_add_to_cart'],
-        statistics['transaction'],
-        statistics['add_to_cart'],
-        statistics['checkout_without_add_to_cart']
+        statistics['targetable'],
+        statistics['untargetable'],
     ]
 
     spark_session_cass.execute(
@@ -304,37 +282,27 @@ def get_predictions(row):
     hits_array = np.array([row.hits_features]).astype(np.float32)
     user_array = np.array([row.user_features]).astype(np.float32)
     sessions_hits_count_array = np.array([row.sessions_hits_count])
-    shopping_stages = np.array([row.shopping_stages]).astype(np.float32)
 
     # Input the numpy arrays into the modle
     result = model.npForward({"dataSessions": sessions_array,
                               "dataHits": hits_array,
                               "dataUsers": user_array,
                               "dataNumItems": sessions_hits_count_array,
-                              "dataShoppingStage": shopping_stages})
+                              })
 
-    # Only keep the prediction for the most recent session
-    result = result[0][-1]
-
-    # Convert the result to a normal list of python floats
-    result = [float(i) for i in result.tolist()]
+    result = [float(i) for i in result[0].tolist()]
 
     # Return the new row to the dataframe
-    return (row.client_id, result[0], result[1], result[2], result[3], result[4], result[5] ,PREDICTION_DAY_AS_STR)
-
-
+    return (row.client_id, result[0], result[1], PREDICTION_DAY_AS_STR)
 
 
 # Load the model
-model = ModelLSTM_V1(inputShape=(8, 14, 8), outputShape=6, hyperParameters={"randomizeSessionSize": True,
-                                                                             "appendPreviousOutput": True,
-                                                                             "baseNeurons": 30,
-                                                                             "lookaheadSessions": 1,
-                                                                             'normalization': 'min_max',
-                                                                             'inShape': (8, 14, 8),
-                                                                             "attributionModeling": "linear"})
+model = ModelTargetabilityRNN(inputShape=(8, 11, 2), hyperParameters={"randomizeSessionSize": True, "lookaheadSessions": 1, "hiddenShape1": 20,
+                                                                      "hiddenShape2": 30, "inShape": (8, 11, 2), "labelColumnName": "Targetable"
+                                                                      })
 # Load the model weights.
 model.loadWeights('/opt/models/ga_epna_model_weights.pkl')
+
 
 def main():
     spark_session = (
@@ -370,31 +338,22 @@ def main():
         repartition(32)
         .toDF([
             'client_id',
-            'all_visits',
-            'product_view',
-            'add_to_cart',
-            'checkout_with_add_to_cart',
-            'checkout_without_add_to_cart',
-            'transaction',
+            'targetable',
+            'untargetable',
             'prediction_date',
         ])
     )
 
-    # Cache the df since we will run multiple queries on it 
     ga_epna_predictions.cache()
 
-    # Calculate all the probability statistics
+
     statistics = {
         'total_predictions': ga_epna_predictions.count(),
-        'all_visits': ga_epna_predictions.where("all_visits > 0.5").count(),
-        'product_view': ga_epna_predictions.where("product_view > 0.5").count(),
-        'add_to_cart': ga_epna_predictions.where("add_to_cart > 0.5").count(),
-        'checkout_with_add_to_cart': ga_epna_predictions.where("checkout_with_add_to_cart > 0.5").count(),
-        'checkout_without_add_to_cart': ga_epna_predictions.where("checkout_without_add_to_cart > 0.5").count(),
-        'transaction': ga_epna_predictions.where("transaction > 0.5").count(),
+        'targetable': ga_epna_predictions.where("targetable > 0.5").count(),
+        'untargetable': ga_epna_predictions.where("untargetable > 0.5").count(),
     }
 
-    # Save the statistics to Cassandra 
+    # Save the statistics to Cassandra
     insert_statistics(statistics)
 
     # Save the predictions to Cassandra

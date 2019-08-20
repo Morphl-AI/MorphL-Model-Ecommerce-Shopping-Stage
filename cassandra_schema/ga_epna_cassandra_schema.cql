@@ -163,7 +163,7 @@ CREATE TABLE morphl.ga_epna_predictions(
   client_id text, 
   prediction_date date,
   targetable double,
-  untargetable double
+  untargetable double,
   PRIMARY KEY((client_id))
 );
 
