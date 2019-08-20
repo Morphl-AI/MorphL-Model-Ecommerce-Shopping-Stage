@@ -30,16 +30,6 @@ CREATE TABLE morphl.ga_epna_sessions (
   PRIMARY KEY ((client_id), day_of_data_capture, session_id)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
-DROP TABLE IF EXISTS morphl.ga_epna_sessions_shopping_stages;
-
-CREATE TABLE morphl.ga_epna_sessions_shopping_stages (
-    client_id text,
-    day_of_data_capture date,
-    session_id text,
-    shopping_stage text,
-    PRIMARY KEY ((client_id), day_of_data_capture, session_id, shopping_stage)
-) WITH CLUSTERING ORDER BY (day_of_data_capture DESC, session_id ASC);
-
 DROP TABLE IF EXISTS morphl.ga_epna_hits;
 
 CREATE TABLE morphl.ga_epna_hits (
@@ -51,31 +41,6 @@ CREATE TABLE morphl.ga_epna_hits (
   json_data text,
   PRIMARY KEY ((client_id), day_of_data_capture, session_id, date_hour_minute)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
-
-DROP TABLE IF EXISTS morphl.ga_epna_product_info;
-
-CREATE TABLE morphl.ga_epna_product_info (
-  client_id text,
-  day_of_data_capture date, 
-  session_id text, 
-  product_name text, 
-  date_hour_minute text, 
-  json_meta text, 
-  json_data text,
-  PRIMARY KEY ((client_id), day_of_data_capture, session_id, product_name)
-) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
-
--- DROP TABLE IF EXISTS morphl.ga_epna_event_info;
-
--- CREATE TABLE morphl.ga_epna_event_info (
---   client_id text,
---   day_of_data_capture date,
---   session_id text,
---   event_action text,
---   event_category text,
---   date_hour_minute text,
---   PRIMARY KEY((client_id), day_of_data_capture, session_id, event_action, event_category, date_hour_minute)
--- ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
 DROP TABLE IF EXISTS morphl.ga_epna_session_index;
 
@@ -215,7 +180,6 @@ CREATE TABLE morphl.ga_epna_batch_inference_data (
   sessions_features  frozen<list<frozen<list<double>>>>,
   hits_features frozen<list<frozen<list<frozen<list<double>>>>>>,
   sessions_hits_count frozen<list<int>>,
-  -- shopping_stages frozen<list<frozen<list<double>>>>,
   PRIMARY KEY(client_id)
 );
 
@@ -224,12 +188,8 @@ DROP TABLE IF EXISTS morphl.ga_epna_predictions;
 CREATE TABLE morphl.ga_epna_predictions(
   client_id text, 
   prediction_date date,
-  all_visits double, 
-  product_view double, 
-  add_to_cart double, 
-  checkout_with_add_to_cart double, 
-  checkout_without_add_to_cart double,
-  transaction double,
+  targetable double,
+  untargetable double
   PRIMARY KEY((client_id))
 );
 
@@ -252,12 +212,8 @@ DROP TABLE IF EXISTS morphl.ga_epna_predictions_statistics;
 CREATE TABLE morphl.ga_epna_predictions_statistics(
   prediction_date date,
   total_predictions int,
-  all_visits int, 
-  product_view int, 
-  add_to_cart int, 
-  checkout_with_add_to_cart int, 
-  checkout_without_add_to_cart int, 
-  transaction int,
+  targetable int,
+  untargetable int,
   PRIMARY KEY((prediction_date))
 );
 
