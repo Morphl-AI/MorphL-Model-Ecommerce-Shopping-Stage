@@ -40,12 +40,14 @@ class CassandraPersistence:
         type_3_list = ['sessions']
         type_4_list = ['hits']
         type_5_list = ['session_index']
+        type_6_list = ['shopping_stages']
 
         template_for_type_1 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,json_meta,json_data) VALUES (?,?,?,?)'
         template_for_type_2 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,mobile_device_branding) VALUES (?,?,?)'
         template_for_type_3 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,json_meta,json_data) VALUES (?,?,?,?,?)'
         template_for_type_4 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,date_hour_minute,json_meta,json_data) VALUES (?,?,?,?,?,?)'
         template_for_type_5 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,session_index) VALUES (?,?,?,?)'
+        template_for_type_6 = 'INSERT INTO ga_epna_{} (client_id,day_of_data_capture,session_id,shopping_stage) VALUES (?,?,?,?)'
 
         for report_type in type_1_list:
             self.prep_stmts[report_type] = self.session.prepare(
@@ -62,6 +64,9 @@ class CassandraPersistence:
         for report_type in type_5_list:
             self.prep_stmts[report_type] = self.session.prepare(
                 template_for_type_5.format(report_type))
+        for report_type in type_6_list:
+            self.prep_stmts[report_type] = self.session.prepare(
+                template_for_type_6.format(report_type))
 
 
         self.type_1_set = set(type_1_list)
@@ -69,6 +74,7 @@ class CassandraPersistence:
         self.type_3_set = set(type_3_list)
         self.type_4_set = set(type_4_list)
         self.type_5_set = set(type_5_list)
+        self.type_6_set = set(type_6_list)
 
     def persist_dict_record(self, report_type, meta_dict, data_dict):
         day_of_data_capture_timestamp = str(
@@ -141,6 +147,21 @@ class CassandraPersistence:
                     'client_id': client_id,
                     'session_id': session_id,
                     }
+
+        # Session shopping stage data
+        if report_type in self.type_6_set:
+            session_id = data_dict['dimensions'][1] + '.' + \
+                str(client_id) + '.' + day_of_data_capture_timestamp
+            shopping_stage = data_dict['dimensions'][2]
+            bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
+                         session_id, shopping_stage]
+
+            return {'cassandra_future': self.session.execute_async(self.prep_stmts[report_type],
+                                                                   bind_list,
+                                                                   timeout=self.CASS_REQ_TIMEOUT),
+                    'client_id': client_id,
+                    'session_id': session_id,
+                    'shopping_stage': shopping_stage}
 
 
 class GoogleAnalytics:
@@ -299,6 +320,26 @@ class GoogleAnalytics:
         
         return self.run_report_and_store('session_index', dimensions, metrics, user_segment)
 
+    # Get sessions shopping stages separately from general session data because shopping stages show up
+    # as one per row and would cause alot of data duplication for all the other columns.
+    def store_shopping_stages(self, user_segment):
+        dimensions = ['dimension8', 'dimension2', 'shoppingStage']
+        metrics = ['pageviews']
+
+        # Apply a filter when retrieving shopping stages so that we only get shopping stages relevant to
+        # our model.
+        dimensions_filters = {
+            "filters": [
+                {
+                    "dimensionName": "ga:shoppingStage",
+                    "operator": "IN_LIST",
+                    "expressions": ["ALL_VISITS", "PRODUCT_VIEW", "ADD_TO_CART", "CHECKOUT", "TRANSACTION"]
+                }
+            ]
+        }
+
+        return self.run_report_and_store('shopping_stages', dimensions, metrics, user_segment, dimensions_filters)
+
     def run(self):
         self.authenticate()
 
@@ -317,6 +358,8 @@ class GoogleAnalytics:
             self.store_hits(user_segment)
             sleep(1)
             self.store_session_index(user_segment)
+            sleep(1)
+            self.store_shopping_stages(user_segment)
 
 
 def main():
