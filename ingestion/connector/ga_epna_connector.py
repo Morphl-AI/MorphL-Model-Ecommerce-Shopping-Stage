@@ -256,8 +256,8 @@ class GoogleAnalytics:
 
     # Get user level data
     def store_users(self, user_segment):
-        dimensions = ['dimension8', 'deviceCategory', 'browser', 'city', 'country']
-        metrics = ['revenuePerUser', 'transactionsPerUser', 'sessions']
+        dimensions = ['dimension8', 'deviceCategory', 'browser']
+        metrics = ['sessions']
 
         return self.run_report_and_store('users', dimensions, metrics, user_segment)
 
@@ -274,7 +274,7 @@ class GoogleAnalytics:
     def store_sessions(self, user_segment):
         dimensions = ['dimension8', 'dimension2', 'searchUsed', 'daysSinceLastSession']
         metrics = ['sessionDuration', 'uniquePageviews', 'transactions', 'transactionRevenue',
-                   'uniquePurchases', 'searchResultViews', 'searchUniques', 'searchDepth', 'searchRefinements']
+                   'searchResultViews', 'searchUniques', 'searchDepth', 'searchRefinements']
 
         return self.run_report_and_store('sessions', dimensions, metrics, user_segment)
 
