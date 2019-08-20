@@ -18,7 +18,6 @@ MORPHL_CASSANDRA_KEYSPACE = getenv('MORPHL_CASSANDRA_KEYSPACE')
 HDFS_DIR_USER = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnau_filtered'
 HDFS_DIR_SESSION = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnas_filtered'
 HDFS_DIR_HIT = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnah_filtered'
-HDFS_DIR_SHOPPING = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epna_shopping_stages_filtered'
 
 # Initialize the spark sessions and return it.
 
@@ -56,62 +55,9 @@ def fetch_from_cassandra(c_table_name, spark_session):
     return df
 
 
-# Formats the stages column so that
-# we keep relevant stages and give them a standard format for one hot encoding.
-def format_and_filter_shopping_stages(stages):
-
-    # Relevant stages for the current model.
-    stages_to_keep = ['ALL_VISITS', 'ALL_VISITS|PRODUCT_VIEW', 'ADD_TO_CART|ALL_VISITS|PRODUCT_VIEW',
-                      'ADD_TO_CART|ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 'ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 'TRANSACTION']
-
-    # Sort the stages because the stages set does not always have the same order.
-    stages.sort()
-
-    # Break up the stages array into a string with the format "stage1|stage2|stage3".
-    stages = '|'.join(stages)
-
-    # Replace all stages that have a transaction with the 'TRANSACTION' strings.
-    stages = 'TRANSACTION' if stages.find('TRANSACTION') != -1 else stages
-
-    # Replace lonely product views with 'ALL_VISITS|PRODUCT_VIEW'.
-    stages = stages if stages != 'PRODUCT_VIEW' else 'ALL_VISITS|PRODUCT_VIEW'
-
-    # All stages that are not part of the list we need for the model,
-    # will be replaced with 'ALL_VISITS'.
-    stages = stages if stages in stages_to_keep else 'ALL_VISITS'
-
-    return stages
-
-
 # Filters the data and makes sure that the client_ids we make predictions on
 # have data in all relevant tables.
-def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits_df, product_info_df, session_index_df):
-
-    # Add product info to hits and replace missing values with 0.0
-    hits_df = (hits_df
-               .join(
-                   product_info_df.drop('product_name'),
-                   ['client_id',
-                    'session_id',
-                    'day_of_data_capture',
-                    'date_hour_minute'
-                    ],
-                   'left_outer'
-               )
-               .fillna(
-                   0.0,
-                   [
-                       'product_detail_views',
-                       'cart_to_detail_rate',
-                       'item_quantity',
-                       'item_revenue',
-                       'product_adds_to_cart',
-                       'product_checkouts',
-                       'quantity_added_to_cart'
-                   ]
-               )
-               .repartition(32)
-               )
+def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits_df, session_index_df):
 
     # Get the number of sessions a user has
     user_session_counts = session_index_df.groupBy(
@@ -232,23 +178,10 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
 
     filtered_sessions_df.repartition(32)
 
-    # Aggregate users data since it is spread out on
-    # multiple days of data capture.
-    aggregated_users_df = (filtered_users_df.
-                           groupBy('client_id').
-                           agg(
-                               f.first('device_category').alias(
-                                   'device_category'),
-                               f.first('browser').alias('browser'),
-                               f.sum('revenue_per_user').alias(
-                                   'revenue_per_user'),
-                               f.sum('transactions_per_user').alias(
-                                   'transactions_per_user'),
-                               f.first('session_count').alias('session_count')
-                           )
-                           )
+    # Get rid of duplicates
+    filtered_users_df = filtered_users_df.drop_duplicates(['client_id'])
 
-    aggregated_users_df.repartition(32)
+    filtered_users_df.repartition(32)
 
     # Remove user duplicates and get their respective mobile device brand.
     grouped_mobile_brand_df = (filtered_mobile_brand_df.
@@ -259,7 +192,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
 
     # Add the mobile data to users that have a mobile device, otherwise
     # make the column equal to (not set).
-    final_users_df = (aggregated_users_df.
+    final_users_df = (filtered_users_df.
                       join(grouped_mobile_brand_df,
                            'client_id', 'left_outer')
                       .na.fill({
@@ -268,43 +201,23 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
 
     final_users_df.repartition(32)
 
-    shopping_stage_formatter = f.udf(
-        format_and_filter_shopping_stages, StringType())
-
-    # Group shopping stages per session into a set.
-    final_shopping_stages_df = (shopping_stages_filtered_by_session_id_df.
-                                join(complete_client_ids, 'client_id', 'inner').
-                                groupBy('session_id').
-                                agg(f.first('client_id').alias('client_id'),
-                                    f.collect_set('shopping_stage').alias(
-                                    'shopping_stage')
-                                    ).
-                                withColumn('shopping_stage', shopping_stage_formatter(
-                                    'shopping_Stage'))
-                                )
-
-    final_shopping_stages_df.repartition(32)
-
     return {
         'user': final_users_df,
         'session': filtered_sessions_df,
         'hit': filtered_hits_df,
-        'shopping_stages': final_shopping_stages_df,
     }
 
 
-def save_filtered_data(user_df, session_df, hit_df, shopping_stage_df):
+def save_filtered_data(user_df, session_df, hit_df):
 
     # Cache and save data to Hadoop
     user_df.cache()
     session_df.cache()
     hit_df.cache()
-    shopping_stage_df.cache()
 
     user_df.write.parquet(HDFS_DIR_USER)
     session_df.write.parquet(HDFS_DIR_SESSION)
     hit_df.write.parquet(HDFS_DIR_HIT)
-    shopping_stage_df.write.parquet(HDFS_DIR_SHOPPING)
 
     save_options_ga_epnau_features_filtered = {
         'keyspace': MORPHL_CASSANDRA_KEYSPACE,
@@ -317,10 +230,6 @@ def save_filtered_data(user_df, session_df, hit_df, shopping_stage_df):
     save_options_ga_epnah_features_filtered = {
         'keyspace': MORPHL_CASSANDRA_KEYSPACE,
         'table': ('ga_epnah_features_filtered')
-    }
-    save_options_ga_epna_shopping_stages_filtered = {
-        'keyspace': MORPHL_CASSANDRA_KEYSPACE,
-        'table': ('ga_epna_shopping_stages_filtered')
     }
 
     # Save data to Cassandra
@@ -345,13 +254,6 @@ def save_filtered_data(user_df, session_df, hit_df, shopping_stage_df):
         .options(**save_options_ga_epnah_features_filtered)
         .save())
 
-    (shopping_stage_df
-     .write
-     .format('org.apache.spark.sql.cassandra')
-     .mode('append')
-     .options(**save_options_ga_epna_shopping_stages_filtered)
-     .save())
-
 
 def main():
 
@@ -373,10 +275,7 @@ def main():
         'ga_epna_users_mobile_brand', spark_session)
 
     shopping_stages_df = fetch_from_cassandra(
-        'ga_epna_sessions_shopping_stages', spark_session)
-
-    ga_epnap_features_raw = fetch_from_cassandra(
-        'ga_epnap_features_raw', spark_session)
+        'ga_epna_shopping_stages', spark_session)
 
     session_index_df = fetch_from_cassandra(
         'ga_epna_session_index', spark_session)
@@ -388,12 +287,11 @@ def main():
         ga_epnas_features_filtered_df,
         shopping_stages_df,
         ga_epnah_features_raw,
-        ga_epnap_features_raw,
         session_index_df
     ))
 
     save_filtered_data(
-        filtered_data_dfs['user'], filtered_data_dfs['session'], filtered_data_dfs['hit'], filtered_data_dfs['shopping_stages'])
+        filtered_data_dfs['user'], filtered_data_dfs['session'], filtered_data_dfs['hit'])
 
 
 if __name__ == '__main__':
