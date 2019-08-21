@@ -146,8 +146,8 @@ def min_max_sessions(session_features):
     # ['session_duration', 'unique_pageviews', 'days_since_last_session',
     #   'search_result_views', 'search_uniques', 'search_depth', 'search_refinements'
     # ]
-    min = [1.0, 0.0073198196, 224.99997, 0.015276575, 1540.2563, 0.0, 0.0]
-    max = [2386.0, 0.04823085, 2432.607, 0.060920756, 4209.3203, 1.0, 1.0]
+    min = [14.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    max = [10934.0, 123.0, 125.0, 31.0, 15.0, 164.0, 17.0,]
 
     for i in range(0, 7):
         session_features[i] = clip(
@@ -161,8 +161,8 @@ def min_max_users(users_features):
     # [ 'session_count', 'device_transactions_per_user', 'device_revenue_per_transaction', 'browser_transactions_per_user',
     # 'browser_revenue_per_transaction'
     # ]
-    min = [1.0, 0.0073198196, 224.99997, 0.015276575, 1540.2563]
-    max = [2386.0, 0.04823085, 2432.607, 0.060920756, 4209.3203]
+    min = [2.0, 0.0087346025, 399.99997, 0.018218083, 1534.8512]
+    max = [1449.0, 0.053525373, 2545.7815, 0.0556939, 2869.8694]
 
     for i in range(0, 5):
         users_features[i] = clip(
