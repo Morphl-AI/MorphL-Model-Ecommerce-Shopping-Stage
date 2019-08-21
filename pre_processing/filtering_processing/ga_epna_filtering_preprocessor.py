@@ -263,7 +263,7 @@ def main():
         'ga_epnau_features_raw', spark_session
     )
 
-    ga_epnas_features_filtered_df = fetch_from_cassandra(
+    ga_epnas_features_raw_df = fetch_from_cassandra(
         'ga_epnas_features_raw', spark_session
     )
 
@@ -284,7 +284,7 @@ def main():
     filtered_data_dfs = (filter_data(
         ga_epnau_features_raw_df,
         mobile_brand_df,
-        ga_epnas_features_filtered_df,
+        ga_epnas_features_raw_df,
         shopping_stages_df,
         ga_epnah_features_raw,
         session_index_df
