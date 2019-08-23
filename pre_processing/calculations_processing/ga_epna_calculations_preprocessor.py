@@ -341,7 +341,7 @@ def main():
     ga_epna_data_users = (users_df.
                           withColumn(
                               'is_mobile', f.when(
-                                  f.col('device_category') == 'desktop', 1.0).otherwise(0.0)
+                                  f.col('device_category') == 'mobile', 1.0).otherwise(0.0)
                           ).
                           withColumn(
                               'is_tablet', f.when(
@@ -349,7 +349,7 @@ def main():
                           ).
                           withColumn(
                               'is_desktop', f.when(
-                                  f.col('device_category') == 'mobile', 1.0).otherwise(0.0)
+                                  f.col('device_category') == 'desktop', 1.0).otherwise(0.0)
                           ).
                           select(
                               'client_id',
