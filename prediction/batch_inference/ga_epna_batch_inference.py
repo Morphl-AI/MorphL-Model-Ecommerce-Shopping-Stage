@@ -297,7 +297,7 @@ def get_predictions(row):
 
 
 # Load the model
-model = ModelTargetabilityRNN(inputShape=(8, 11, 2), hyperParameters={"randomizeSessionSize": True, "lookaheadSessions": 1, "hiddenShape1": 20,
+model = ModelTargetabilityRNN(inputShape=(8, 11, 2), hyperParameters={"randomizeSessionSize": True, "lookaheadSessions": 0, "hiddenShape1": 20,
                                                                       "hiddenShape2": 30, "inShape": (8, 11, 2), "labelColumnName": "Targetable"
                                                                       })
 # Load the model weights.
