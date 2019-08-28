@@ -133,7 +133,7 @@ def min_max_hits(hit_features):
     # Max and min used when training for each feature
     # ['time_on_page', 'product_detail_views']
     min = [0.0, 0.0]
-    max = [1495.0, 2.0]
+    max = [1418.0, 2.0]
 
     for i in range(0, 2):
         hit_features[i] = clip((hit_features[i] - min[i]) / (max[i] - min[i]))
@@ -141,13 +141,15 @@ def min_max_hits(hit_features):
     return hit_features
 
 # Normalizes session data.
+
+
 def min_max_sessions(session_features):
     # Max and min used when training for each feature.
     # ['session_duration', 'unique_pageviews', 'days_since_last_session',
     #   'search_result_views', 'search_uniques', 'search_depth', 'search_refinements'
     # ]
-    min = [14.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    max = [10934.0, 123.0, 125.0, 31.0, 15.0, 164.0, 17.0,]
+    min = [13.0,  1.0,  0.0,  0.0,  0.0,  0.0,  0.0]
+    max = [10970.0, 132.0, 127.0, 30.0, 15.0, 165.0, 17.0]
 
     for i in range(0, 7):
         session_features[i] = clip(
@@ -156,13 +158,15 @@ def min_max_sessions(session_features):
     return session_features
 
 # Normalizes user data.
+
+
 def min_max_users(users_features):
     # Max and min values used when training for each feature.
     # [ 'session_count', 'device_transactions_per_user', 'device_revenue_per_transaction', 'browser_transactions_per_user',
     # 'browser_revenue_per_transaction'
     # ]
-    min = [2.0, 0.0087346025, 399.99997, 0.018218083, 1534.8512]
-    max = [1449.0, 0.053525373, 2545.7815, 0.0556939, 2869.8694]
+    min = [1.0 , 0.01, 225.0 , 0.02, 1540.26]
+    max = [1449.0 , 0.09, 2432.61, 0.06, 4209.32,]
 
     for i in range(0, 5):
         users_features[i] = clip(
@@ -170,10 +174,12 @@ def min_max_users(users_features):
 
     return users_features
 
+
 def pad_with_zero(hits_features):
     max_hit_count = 0
     for session in hits_features:
-        max_hit_count = max_hit_count if len(session) < max_hit_count else len(session)
+        max_hit_count = max_hit_count if len(
+            session) < max_hit_count else len(session)
 
     for session_count in range(len(hits_features)):
         hits_features[session_count] = hits_features[session_count] + \
@@ -225,7 +231,8 @@ def main():
     users_df = calculate_browser_device_features(
         ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
 
-    ga_epnas_features_filtered_df = ga_epnas_features_filtered_df.drop('transactions', 'transaction_revenue')
+    ga_epnas_features_filtered_df = ga_epnas_features_filtered_df.drop(
+        'transactions', 'transaction_revenue')
 
     # Initialize udfs
     min_maxer_hits = f.udf(min_max_hits, ArrayType(DoubleType()))
@@ -306,11 +313,13 @@ def main():
                                      0.0)
                              )
                              .withColumn('new_visitor',
-                                f.when(f.col('session_index') == 1, 1.0).otherwise(0.0)
-                             )
-                             .withColumn('returning_visitor', 
-                                f.when(f.col('session_index') > 1, 1.0).otherwise(0.0)
-                             )
+                                         f.when(f.col('session_index')
+                                                == 1, 1.0).otherwise(0.0)
+                                         )
+                             .withColumn('returning_visitor',
+                                         f.when(f.col('session_index')
+                                                > 1, 1.0).otherwise(0.0)
+                                         )
                              .select(
                                  'client_id',
                                  'session_id',
