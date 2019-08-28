@@ -16,6 +16,14 @@
         this.popupNameGeneral = "morphl_popup_general";
         this.gaCustomDimension = "dimensionX"; // Session level custom dimension used for tracking shopping stage for an user
 
+        // When using Google Optimize for A/B testing predictions, set the variables below to target your MorphL assisted variant.
+        this.optimizeSettings = {
+          enabled: true,
+          selector: "body",
+          attribute: "data-morphl-assisted",
+          value: 1
+        };
+
         // !!!!! Set below the threshold for the predictions values. They will be used only if they are higher than the below value !!!!!!!!
         this.shoppingStageThreshold = 0.5;
 
@@ -26,6 +34,10 @@
           // Check if the popup is disabled
           var isDisabled = JSObject.getCookie(JSObject.cookieNameDisabled);
           if (Number(isDisabled) === 1) {
+            return;
+          }
+
+          if (this.checkOptimizeExperimentEnabled() === false) {
             return;
           }
 
@@ -100,6 +112,44 @@
           }
 
           return null;
+        };
+
+        /**
+         * Check Google Optimize setup
+         *
+         * @return boolean = True if Optimize is disabled or the Variant check has passed. False otherwise.
+         */
+        this.checkOptimizeExperimentEnabled = function() {
+          if (
+            !JSObject.optimizeSettings ||
+            !JSObject.optimizeSettings.enabled ||
+            !JSObject.optimizeSettings.selector ||
+            !JSObject.optimizeSettings.attribute ||
+            !JSObject.optimizeSettings.value ||
+            JSObject.optimizeSettings.enabled === false
+          ) {
+            return true;
+          }
+
+          var selectorElement = document.getElementsByTagName(
+            JSObject.optimizeSettings.selector
+          );
+
+          if (
+            selectorElement &&
+            selectorElement.length >= 1 &&
+            selectorElement[0].hasAttribute(JSObject.optimizeSettings.attribute)
+          ) {
+            var optimizeAttrValue = selectorElement[0].getAttribute(
+              JSObject.optimizeSettings.attribute
+            );
+
+            if (Number(optimizeAttrValue) === JSObject.optimizeSettings.value) {
+              return true;
+            }
+          }
+
+          return false;
         };
 
         /**
