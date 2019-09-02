@@ -82,8 +82,7 @@ CREATE TABLE morphl.ga_epnau_features_raw (
     day_of_data_capture date,
     device_category text,
     browser text,
-    revenue_per_user double,
-    transactions_per_user double,
+    city text,
     PRIMARY KEY ((client_id), day_of_data_capture)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
@@ -91,19 +90,18 @@ DROP TABLE IF EXISTS morphl.ga_epnas_features_raw;
 
 CREATE TABLE morphl.ga_epnas_features_raw (
   client_id text,
-  day_of_data_capture date,
   session_id text, 
-  days_since_last_session double,
+  day_of_data_capture date,
   session_duration double, 
   unique_page_views double,
   transactions double, 
   transaction_revenue double,
-  unique_purchases double,
   search_result_views double,
   search_uniques double, 
   search_depth double,
   search_refinements double,
   search_used text,
+  days_since_last_session double,
   PRIMARY KEY ((client_id), day_of_data_capture, session_id)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
@@ -115,6 +113,7 @@ CREATE TABLE morphl.ga_epnah_features_raw (
   session_id text,
   date_hour_minute text,
   time_on_page double,
+  pageviews double,
   PRIMARY KEY ((client_id), day_of_data_capture, session_id, date_hour_minute)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
@@ -126,13 +125,8 @@ CREATE TABLE morphl.ga_epnap_features_raw (
   session_id text, 
   date_hour_minute text,
   product_name text, 
-  quantity_added_to_cart double, 
-  product_adds_to_cart double,
-  product_checkouts double, 
   item_quantity double,
-  item_revenue double, 
   product_detail_views double, 
-  cart_to_detail_rate double,
   PRIMARY KEY ((client_id), day_of_data_capture, session_id, date_hour_minute, product_name )
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 

@@ -52,14 +52,10 @@ class BasicPreprocessor:
              'original_name': 'ga:browser',
              'needs_conversion': False,
              },
-            {'field_name': 'revenue_per_user',
-             'original_name': 'ga:revenuePerUser',
-             'needs_conversion': True,
-             },
-            {'field_name': 'transactions_per_user',
-             'original_name': 'ga:transactionsPerUser',
-             'needs_conversion': True,
-             },
+            {'field_name': 'city',
+             'original_name': 'ga:city',
+             'needs_conversion': False,
+            }
         ]
 
         # session_duration: the total duration of a session;
@@ -89,10 +85,6 @@ class BasicPreprocessor:
              },
             {'field_name': 'transaction_revenue',
              'original_name': 'ga:transactionRevenue',
-             'needs_conversion': True,
-             },
-            {'field_name': 'unique_purchases',
-             'original_name': 'ga:uniquePurchases',
              'needs_conversion': True,
              },
             {'field_name': 'search_result_views',
@@ -130,6 +122,10 @@ class BasicPreprocessor:
              'original_name': 'ga:timeOnPage',
              'needs_conversion': True,
              },
+             {'field_name': 'pageviews',
+              'original_name': 'ga:pageviews',
+              'needs_conversion': True,
+             }
         ]
 
 
@@ -141,28 +137,8 @@ class BasicPreprocessor:
         # cart_to_detail_rate: product adds divided by views of product details;
         # product_detail_views: number of times users viewed the product-detail page.
         field_baselines['ga_epnap_df'] = [
-            {'field_name': 'quantity_added_to_cart',
-             'original_name': 'ga:quantityAddedToCart',
-             'needs_conversion': True,
-             },
-            {'field_name': 'product_adds_to_cart',
-             'original_name': 'ga:productAddsToCart',
-             'needs_conversion': True,
-             },
-            {'field_name': 'product_checkouts',
-             'original_name': 'ga:productCheckouts',
-             'needs_conversion': True,
-             },
             {'field_name': 'item_quantity',
              'original_name': 'ga:itemQuantity',
-             'needs_conversion': True,
-             },
-            {'field_name': 'item_revenue',
-             'original_name': 'ga:itemRevenue',
-             'needs_conversion': True,
-             },
-            {'field_name': 'cart_to_detail_rate',
-             'original_name': 'ga:cartToDetailRate',
              'needs_conversion': True,
              },
             {'field_name': 'product_detail_views',
