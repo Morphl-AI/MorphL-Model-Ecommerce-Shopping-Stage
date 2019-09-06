@@ -121,10 +121,6 @@ class BasicPreprocessor:
             {'field_name': 'time_on_page',
              'original_name': 'ga:timeOnPage',
              'needs_conversion': True,
-             },
-             {'field_name': 'pageviews',
-              'original_name': 'ga:pageviews',
-              'needs_conversion': True,
              }
         ]
 
