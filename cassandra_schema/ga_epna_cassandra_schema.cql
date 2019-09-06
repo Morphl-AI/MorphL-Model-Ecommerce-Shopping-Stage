@@ -113,7 +113,6 @@ CREATE TABLE morphl.ga_epnah_features_raw (
   session_id text,
   date_hour_minute text,
   time_on_page double,
-  pageviews double,
   PRIMARY KEY ((client_id), day_of_data_capture, session_id, date_hour_minute)
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
 
@@ -134,11 +133,10 @@ DROP TABLE IF EXISTS morphl.ga_epnau_features_filtered;
 
 CREATE TABLE morphl.ga_epnau_features_filtered (
     client_id text,
+    session_count int,
     device_category text,
     browser text,
-    session_count int,
-    revenue_per_user double,
-    transactions_per_user double,
+    city text,
     mobile_device_branding text,
     PRIMARY KEY ((client_id))
 );
@@ -148,17 +146,16 @@ DROP TABLE IF EXISTS morphl.ga_epnas_features_filtered;
 CREATE TABLE morphl.ga_epnas_features_filtered (
   client_id text,
   session_id text, 
-  days_since_last_session double,
   session_duration double, 
   unique_page_views double,
-  transactions double, 
-  transaction_revenue double,
-  unique_purchases double,
+  days_since_last_session double,
   search_result_views double,
   search_uniques double, 
   search_depth double,
   search_refinements double,
   search_used text,
+  transactions double, 
+  transaction_revenue double,
   session_index int, 
   PRIMARY KEY ((client_id), session_id)
 );
@@ -171,22 +168,8 @@ CREATE TABLE morphl.ga_epnah_features_filtered (
   date_hour_minute text,
   time_on_page double,
   product_detail_views double,
-  cart_to_detail_rate double,
-  item_quantity double, 
-  item_revenue double, 
-  product_adds_to_cart double, 
-  product_checkouts double, 
-  quantity_added_to_cart double,
+  item_quantity double,
   PRIMARY KEY ((client_id),session_id, date_hour_minute)
-);
-
-DROP TABLE IF EXISTS morphl.ga_epna_shopping_stages_filtered;
-
-CREATE TABLE morphl.ga_epna_shopping_stages_filtered (
-  client_id text, 
-  session_id text,
-  shopping_stage text,
-  PRIMARY KEY((client_id), session_id)
 );
 
 DROP TABLE IF EXISTS morphl.ga_epna_batch_inference_data;
