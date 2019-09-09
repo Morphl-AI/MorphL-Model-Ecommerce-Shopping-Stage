@@ -130,6 +130,24 @@ def calculate_time_on_page_features(user_features, hit_features):
     
     return user_features.join(time_on_page_features_df, 'client_id', 'inner')
 
+
+def calculate_search_features(user_features, session_features):
+    search_features = (session_features
+                    .drop_duplicates(subset=['client_id', 'session_id'])
+                    .groupBy('client_id')
+                    .agg(
+                        f.count('session_id').alias('number_of_sessions'),
+                        f.sum('search_result_views').alias('number_of_searches')
+                    )
+                )
+
+    search_features = search_features.withColumn('searches_per_session', search_features['number_of_searches']/search_features['number_of_sessions'])
+
+    search_features = search_features.select('client_id', 'searches_per_session')
+
+    return user_features.join(search_features, 'client_id', 'inner')
+
+
 # Sets values outside of [0.0, 1.0] to 0.0 or 1.0.
 def clip(value):
     if value < 0.0:
@@ -246,6 +264,7 @@ def main():
         ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
 
     users_df = calculate_time_on_page_features(ga_epnau_features_filtered_df, ga_epnah_features_filtered_df)
+    users_df = calculate_search_features(ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
 
     # Initialize udfs
     min_maxer_hits = f.udf(min_max_hits, ArrayType(DoubleType()))
