@@ -18,7 +18,6 @@ MORPHL_CASSANDRA_KEYSPACE = getenv('MORPHL_CASSANDRA_KEYSPACE')
 HDFS_DIR_USER_FILTERED = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnau_filtered'
 HDFS_DIR_SESSION_FILTERED = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnas_filtered'
 HDFS_DIR_HIT_FILTERED = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnah_filtered'
-HDFS_DIR_STAGES_FILTERED = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epna_shopping_stages_filtered'
 
 # Initialize the spark sessions and return it.
 
@@ -119,6 +118,18 @@ def calculate_browser_device_features(users_df, sessions_df):
             ).repartition(32)
 
 
+def calculate_time_on_page_features(user_features, hit_features):
+    time_on_page_features_df = (hit_features
+                                    .groupBy('client_id')
+                                    .agg(
+                                        f.sum('time_on_page').alias('total_time_on_page'), 
+                                        f.mean('time_on_page').alias('avg_time_on_page')
+                                    )
+                                    .select('client_id', 'total_time_on_page', 'avg_time_on_page')
+                                )
+    
+    return user_features.join(time_on_page_features_df, 'client_id', 'inner')
+
 # Sets values outside of [0.0, 1.0] to 0.0 or 1.0.
 def clip(value):
     if value < 0.0:
@@ -193,13 +204,12 @@ def pad_with_zero(hits_features):
 # Save array data to Cassandra.
 
 
-def save_data(hits_data, hits_num_data, session_data, user_data, shopping_stages_data):
+def save_data(hits_data, hits_num_data, session_data, user_data):
 
     ga_epna_batch_inference_data = (hits_data
                                     .join(hits_num_data, 'client_id', 'inner')
                                     .join(session_data, 'client_id', 'inner')
                                     .join(user_data, 'client_id', 'inner')
-                                    .join(shopping_stages_data, 'client_id', 'inner')
                                     .repartition(32)
                                     )
 
@@ -231,13 +241,11 @@ def main():
     ga_epnah_features_filtered_df = spark_session.read.parquet(
         HDFS_DIR_HIT_FILTERED)
 
-    ga_epna_shopping_stages_filtered_df = spark_session.read.parquet(
-        HDFS_DIR_STAGES_FILTERED
-    )
-
     # Calculate revenue by device and revenue by browser columns
     users_df = calculate_browser_device_features(
         ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
+
+    users_df = calculate_time_on_page_features(ga_epnau_features_filtered_df, ga_epnah_features_filtered_df)
 
     # Initialize udfs
     min_maxer_hits = f.udf(min_max_hits, ArrayType(DoubleType()))
@@ -380,6 +388,8 @@ def main():
                                   f.col('device_revenue_per_transaction'),
                                   f.col('browser_transactions_per_user'),
                                   f.col('browser_revenue_per_transaction'),
+                                  f.col('total_time_on_page'),
+                                  f.col('avg_time_on_page'),
                                   f.col('is_desktop'),
                                   f.col('is_mobile'),
                                   f.col('is_tablet'),
@@ -388,60 +398,6 @@ def main():
                           .withColumn('user_features', min_maxer_users('user_features'))
                           .repartition(32)
                           )
-
-    # Get the shopping stages arrays
-    # user[
-    #       session[stages],
-    #       session[stages]
-    # ]
-
-    stages_window_by_users = Window.partitionBy(
-        'client_id').orderBy('session_id')
-
-    ga_epna_data_shopping_stages = (ga_epna_shopping_stages_filtered_df.
-                                    withColumn(
-                                        'shopping_stage_1', f.when(
-                                            f.col('shopping_stage') == 'ALL_VISITS', 1.0).otherwise(0.0)
-                                    ).
-                                    withColumn(
-                                        'shopping_stage_2', f.when(
-                                            f.col('shopping_stage') == 'ALL_VISITS|PRODUCT_VIEW', 1.0).otherwise(0.0)
-                                    ).
-                                    withColumn(
-                                        'shopping_stage_3', f.when(
-                                            f.col('shopping_stage') == 'ADD_TO_CART|ALL_VISITS|PRODUCT_VIEW', 1.0).otherwise(0.0)
-                                    ).
-                                    withColumn(
-                                        'shopping_stage_4', f.when(
-                                            f.col('shopping_stage') == 'ADD_TO_CART|ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 1.0).otherwise(0.0)
-                                    ).
-                                    withColumn(
-                                        'shopping_stage_5', f.when(
-                                            f.col('shopping_stage') == 'ALL_VISITS|CHECKOUT|PRODUCT_VIEW', 1.0).otherwise(0.0)
-                                    ).
-                                    withColumn('shopping_stage_6', f.when(
-                                        f.col('shopping_stage') == 'TRANSACTION', 1.0).otherwise(0.0)
-                                    )
-                                    .select(
-                                        'client_id',
-                                        'session_id',
-                                        f.array(
-                                            f.col('shopping_stage_2'),
-                                            f.col('shopping_stage_1'),
-                                            f.col('shopping_stage_3'),
-                                            f.col('shopping_stage_6'),
-                                            f.col('shopping_stage_4'),
-                                            f.col('shopping_stage_5'),
-                                        ).alias('shopping_stage')
-                                    ).
-                                    withColumn('shopping_stage', f.collect_list('shopping_stage').over(stages_window_by_users)).
-                                    groupBy('client_id').
-                                    agg(
-                                        f.last('shopping_stage').alias(
-                                            'shopping_stages')
-                                    ).
-                                    repartition(32)
-                                    )
 
     # Get the number of hits arrays
     # user[
@@ -469,7 +425,7 @@ def main():
                              )
 
     save_data(ga_epna_data_hits, ga_epna_data_num_hits, ga_epna_data_sessions,
-              ga_epna_data_users, ga_epna_data_shopping_stages)
+              ga_epna_data_users)
 
 
 if __name__ == '__main__':
