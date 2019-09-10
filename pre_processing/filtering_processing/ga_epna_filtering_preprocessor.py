@@ -42,6 +42,8 @@ def get_spark_session():
     return spark_session
 
 # Return a spark dataframe from a specified Cassandra table.
+
+
 def fetch_from_cassandra(c_table_name, spark_session):
 
     load_options = {
@@ -57,12 +59,26 @@ def fetch_from_cassandra(c_table_name, spark_session):
 
 # Filters the data and makes sure that the client_ids we make predictions on
 # have data in all relevant tables.
+
+
 def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits_df, product_info_df, session_index_df):
 
     # Add product info to hits and replace missing values with 0.0
+
+    # Aggregate product data per hit so it doesn't get overwritten
+    product_info_df = (product_info_df
+                       .groupBy(['client_id', 'day_of_data_capture', 'session_id', 'date_hour_minute'])
+                       .agg(
+                           f.sum('item_quantity').alias('item_quantity'),
+                           f.sum('product_detail_views').alias(
+                               'product_detail_views')
+                       )
+                       .repartition(32)
+                       )
+
     hits_df = (hits_df
                .join(
-                   product_info_df.drop('product_name'),
+                   product_info_df,
                    ['client_id',
                     'session_id',
                     'day_of_data_capture',
