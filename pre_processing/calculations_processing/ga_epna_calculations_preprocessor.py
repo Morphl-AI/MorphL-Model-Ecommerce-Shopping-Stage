@@ -114,36 +114,88 @@ def calculate_browser_device_features(users_df, sessions_df):
             .join(
                 transactions_by_browser_df,
                 'browser',
-                'inner')
+                'inner'
             ).repartition(32)
+            )
+
+
+def calculate_city_features(users_df, sessions_df):
+
+    # Merge sessions and users dataframes.
+    users_sessions_df = (users_df
+                         .join(
+                             sessions_df,
+                             'client_id',
+                             'inner'))
+
+    # Aggregate transactions and revenue by city.
+    transactions_by_city_df = (users_sessions_df
+                               .groupBy('city')
+                               .agg(
+                                   f.sum('transactions').alias(
+                                       'transactions'),
+                                   f.sum('transaction_revenue').alias(
+                                       'transaction_revenue'),
+                                   f.countDistinct(
+                                       'client_id').alias('users')
+                               ))
+
+    # Calculate city revenue per transaction and city transactions per user columns.
+    transactions_by_city_df = (transactions_by_city_df
+                               .withColumn(
+                                   'city_revenue_per_transaction',
+                                   transactions_by_city_df.transaction_revenue /
+                                   (transactions_by_city_df.transactions + 1e-5)
+                               )
+                               .withColumn(
+                                   'city_transactions_per_user',
+                                   transactions_by_city_df.transactions / transactions_by_city_df.users
+                               )
+                               .drop('transactions', 'transaction_revenue')
+                               )
+
+    # Merge new columns into main df and return them
+    return (users_df
+            .join(
+                transactions_by_city_df,
+                'city',
+                'inner'
+            )
+            .repartition(32)
+            )
 
 
 def calculate_time_on_page_features(user_features, hit_features):
     time_on_page_features_df = (hit_features
-                                    .groupBy('client_id')
-                                    .agg(
-                                        f.sum('time_on_page').alias('total_time_on_page'), 
-                                        f.mean('time_on_page').alias('avg_time_on_page')
-                                    )
-                                    .select('client_id', 'total_time_on_page', 'avg_time_on_page')
+                                .groupBy('client_id')
+                                .agg(
+                                    f.sum('time_on_page').alias(
+                                        'total_time_on_page'),
+                                    f.mean('time_on_page').alias(
+                                        'avg_time_on_page')
                                 )
-    
+                                .select('client_id', 'total_time_on_page', 'avg_time_on_page')
+                                )
+
     return user_features.join(time_on_page_features_df, 'client_id', 'inner')
 
 
 def calculate_search_features(user_features, session_features):
     search_features = (session_features
-                    .drop_duplicates(subset=['client_id', 'session_id'])
-                    .groupBy('client_id')
-                    .agg(
-                        f.count('session_id').alias('number_of_sessions'),
-                        f.sum('search_result_views').alias('number_of_searches')
-                    )
-                )
+                       .drop_duplicates(subset=['client_id', 'session_id'])
+                       .groupBy('client_id')
+                       .agg(
+                           f.count('session_id').alias('number_of_sessions'),
+                           f.sum('search_result_views').alias(
+                               'number_of_searches')
+                       )
+                       )
 
-    search_features = search_features.withColumn('searches_per_session', search_features['number_of_searches']/search_features['number_of_sessions'])
+    search_features = search_features.withColumn(
+        'searches_per_session', search_features['number_of_searches']/search_features['number_of_sessions'])
 
-    search_features = search_features.select('client_id', 'searches_per_session')
+    search_features = search_features.select(
+        'client_id', 'searches_per_session')
 
     return user_features.join(search_features, 'client_id', 'inner')
 
@@ -206,10 +258,12 @@ def min_max_users(users_features):
 
     return users_features
 
+
 def pad_with_zero(hits_features):
     max_hit_count = 0
     for session in hits_features:
-        max_hit_count = max_hit_count if len(session) < max_hit_count else len(session)
+        max_hit_count = max_hit_count if len(
+            session) < max_hit_count else len(session)
 
     for session_count in range(len(hits_features)):
         hits_features[session_count] = hits_features[session_count] + \
@@ -262,9 +316,13 @@ def main():
     # Calculate revenue by device and revenue by browser columns
     users_df = calculate_browser_device_features(
         ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
-
-    users_df = calculate_time_on_page_features(ga_epnau_features_filtered_df, ga_epnah_features_filtered_df)
-    users_df = calculate_search_features(ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
+    users_df = calculate_city_features(
+        ga_epnau_features_filtered_df, ga_epnas_features_filtered_df
+    )
+    users_df = calculate_time_on_page_features(
+        ga_epnau_features_filtered_df, ga_epnah_features_filtered_df)
+    users_df = calculate_search_features(
+        ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
 
     # Initialize udfs
     min_maxer_hits = f.udf(min_max_hits, ArrayType(DoubleType()))
@@ -351,11 +409,13 @@ def main():
                                      0.0)
                              )
                              .withColumn('new_visitor',
-                                f.when(f.col('session_index') == 1, 1.0).otherwise(0.0)
-                             )
-                             .withColumn('returning_visitor', 
-                                f.when(f.col('session_index') > 1, 1.0).otherwise(0.0)
-                             )
+                                         f.when(f.col('session_index')
+                                                == 1, 1.0).otherwise(0.0)
+                                         )
+                             .withColumn('returning_visitor',
+                                         f.when(f.col('session_index')
+                                                > 1, 1.0).otherwise(0.0)
+                                         )
                              .select(
                                  'client_id',
                                  'session_id',
