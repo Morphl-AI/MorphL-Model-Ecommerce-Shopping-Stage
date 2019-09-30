@@ -1,6 +1,6 @@
 from os import getenv
 from pyspark.sql import functions as f, SparkSession, Window
-from pyspark.sql.types import ArrayType, DoubleType
+from pyspark.sql.types import ArrayType, DoubleType, StringType
 
 
 HDFS_PORT = 9000
@@ -271,6 +271,15 @@ def pad_with_zero(hits_features):
             (max_hit_count - len(hits_features[session_count]))
 
     return hits_features
+
+def format_date(date):
+       
+    date = str(date)
+    
+    date = date[:4] + '-' + date[4:6] + '-' + date[6:8] + ' ' + date[8:10] + '-' + date[10:12]
+    
+    
+    return date
 
 
 # Save array data to Cassandra.
