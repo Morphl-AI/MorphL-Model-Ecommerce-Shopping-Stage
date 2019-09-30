@@ -199,7 +199,6 @@ def calculate_search_features(user_features, session_features):
 
     return user_features.join(search_features, 'client_id', 'inner')
 
-
 def calculate_session_time_features(user_features, hit_features):
 
     date_formatter = f.udf(format_date, StringType())
@@ -246,9 +245,25 @@ def calculate_session_time_features(user_features, hit_features):
                               f.round(session_time_features['diff_first_last_session_seconds'] / 86400)
                              )
                              .drop('first_session_date', 'last_session_date')
+                             .repartition(32)
                             )
     
-    user_features = user_features.join(session_time_features, 'client_id', 'inner')
+    
+    standard_deviations = (session_time_features
+                             .groupBy('client_id')
+                             .agg(
+                                 f.stddev_pop('diff_first_last_session_seconds').alias('std_sessions_seconds'),
+                                 f.stddev_pop('diff_first_last_session_hours').alias('std_sessions_hours'),
+                                 f.stddev_pop('diff_first_last_session_days').alias('std_sessions_days')
+                             )
+                             .repartition(32)
+                            )
+    
+    user_features = (user_features
+                     .join(session_time_features, 'client_id', 'inner')
+                     .join(standard_deviations, 'client_id', 'inner')
+                     .repartition(32)
+                    )
     
     return user_features
 
