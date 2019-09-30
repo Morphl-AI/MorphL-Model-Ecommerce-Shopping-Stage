@@ -200,6 +200,59 @@ def calculate_search_features(user_features, session_features):
     return user_features.join(search_features, 'client_id', 'inner')
 
 
+def calculate_session_time_features(user_features, hit_features):
+
+    date_formatter = f.udf(format_date, StringType())
+
+    session_time_features = (hit_features
+                            .drop_duplicates(subset=['client_id', 'session_id'])
+                            .groupBy('client_id')
+                            .agg(
+                                f.min('date_hour_minute').alias('first_session_date'),
+                                f.max('date_hour_minute').alias('last_session_date')
+                            )
+                            .withColumn(
+                                'first_session_date', 
+                                f.unix_timestamp(
+                                    date_formatter('first_session_date'),
+                                    'yyyy-MM-dd HH:mm'
+                                )
+                            )
+                            .withColumn(
+                                'last_session_date', 
+                                f.unix_timestamp(
+                                    date_formatter('last_session_date'),
+                                    'yyyy-MM-dd HH:mm'
+                                )
+                            )
+                            .repartition(32)
+    )
+    
+    session_time_features = (session_time_features
+                             .withColumn(
+                             'diff_first_last_session_seconds',
+                             session_time_features['last_session_date'] - session_time_features['first_session_date'] 
+                             )
+                            
+    )
+    
+    session_time_features = (session_time_features
+                             .withColumn(
+                             'diff_first_last_session_hours',
+                              f.round(session_time_features['diff_first_last_session_seconds'] / 3600)
+                             )
+                             .withColumn(
+                             'diff_first_last_session_days', 
+                              f.round(session_time_features['diff_first_last_session_seconds'] / 86400)
+                             )
+                             .drop('first_session_date', 'last_session_date')
+                            )
+    
+    user_features = user_features.join(session_time_features, 'client_id', 'inner')
+    
+    return user_features
+
+
 # Sets values outside of [0.0, 1.0] to 0.0 or 1.0.
 def clip(value):
     if value < 0.0:
