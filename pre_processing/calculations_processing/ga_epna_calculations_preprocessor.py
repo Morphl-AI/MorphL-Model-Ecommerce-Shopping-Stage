@@ -261,6 +261,7 @@ def calculate_diff_first_last_session_dates(user_features, hit_features):
 
     return user_features
 
+
 def calculate_diff_first_last_session_dates(user_features, hit_features):
 
     date_formatter = f.udf(format_date, StringType())
@@ -330,7 +331,8 @@ def calculate_std_diff_session_dates(user_features, hit_features):
                              .drop_duplicates(subset=['client_id', 'session_id'])
                              .groupBy(['client_id', 'session_id'])
                              .agg(
-                                 f.first('date_hour_minute').alias('date_hour_minute')
+                                 f.first('date_hour_minute').alias(
+                                     'date_hour_minute')
                              )
                              .withColumn(
                                  'date_hour_minute_seconds',
@@ -343,33 +345,56 @@ def calculate_std_diff_session_dates(user_features, hit_features):
                              )
 
     session_time_features = (session_time_features
-                            .withColumn(
-                                'date_hour_minute_hours',
-                                f.round(session_time_features['date_hour_minute_seconds'] / 3600)
-                            )
-                            .withColumn(
-                                'date_hour_minute_days',
-                                f.round(
-                                    session_time_features['date_hour_minute_seconds'] / 86400
-                                )
-                            )
-                            .repartition(32)                        
-    )
+                             .withColumn(
+                                 'date_hour_minute_hours',
+                                 f.round(
+                                     session_time_features['date_hour_minute_seconds'] / 3600)
+                             )
+                             .withColumn(
+                                 'date_hour_minute_days',
+                                 f.round(
+                                     session_time_features['date_hour_minute_seconds'] / 86400
+                                 )
+                             )
+                             .repartition(32)
+                             )
     session_time_features = (session_time_features
-                            .groupBy('client_id')
-                            .agg(
-                                f.stddev_pop('date_hour_minute_seconds').alias('std_between_session_dates_seconds'),
-                                f.stddev_pop('date_hour_minute_hours').alias('std_between_session_dates_hours'),
-                                f.stddev_pop('date_hour_minute_days').alias('std_between_session_dates_days')
-                            )
-                            .repartition(32)
-    )       
+                             .groupBy('client_id')
+                             .agg(
+                                 f.stddev_pop('date_hour_minute_seconds').alias(
+                                     'std_between_session_dates_seconds'),
+                                 f.stddev_pop('date_hour_minute_hours').alias(
+                                     'std_between_session_dates_hours'),
+                                 f.stddev_pop('date_hour_minute_days').alias(
+                                     'std_between_session_dates_days')
+                             )
+                             .repartition(32)
+                             )
 
     user_features = (user_features
-                    .join(session_time_features, 'client_id', 'inner')
+                     .join(session_time_features, 'client_id', 'inner')
+                     .repartition(32)
+                     )
+
+    return user_features
+
+
+def calculate_order_features(user_features, product_features):
+
+    user_order_features = (product_features
+                           .groupBy(['client_id', 'product_name'])
+                           .agg(
+                               f.sum('product_detail_views').alias('total_products_viewed'),
+                               f.sum('item_quantity').alias('total_products_ordered')
+                           )
+                           .repartition(32)
+                           )
+    
+    user_features = (user_features
+                    .join(user_order_features, 'client_id', 'inner')
                     .repartition(32)
                     )
-                    
+
     return user_features
 
 
@@ -486,6 +511,16 @@ def main():
     # Initialize spark session
     spark_session = get_spark_session()
 
+    load_options = {
+        'keyspace': MORPHL_CASSANDRA_KEYSPACE,
+        'table': 'ga_epnap_features_raw',
+        'spark.cassandra.input.fetch.size_in_rows': '150'}
+
+    ga_epnap_features_raw_df = (spark_session.read.format('org.apache.spark.sql.cassandra')
+          .options(**load_options)
+          .load())
+
+
     # Fetch dfs from hadoop
     ga_epnau_features_filtered_df = spark_session.read.parquet(
         HDFS_DIR_USER_FILTERED)
@@ -495,6 +530,7 @@ def main():
 
     ga_epnah_features_filtered_df = spark_session.read.parquet(
         HDFS_DIR_HIT_FILTERED)
+
 
     # Calculate revenue by device and revenue by browser columns
     users_df = calculate_browser_device_features(
