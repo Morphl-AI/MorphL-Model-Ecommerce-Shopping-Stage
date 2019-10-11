@@ -411,13 +411,11 @@ def clip(value):
 # Normalizes hit data.
 def min_max_hits(hit_features):
     # Max and min used when training for each feature
-    # ['time_on_page', 'product_detail_views', 'cart_to_detail_rate', 'item_quantity', 'item_revenue',
-    #  'product_adds_to_cart', 'product_checkouts', 'quantity_added_to_cart'
-    # ]
-    min = [0.0] * 8
-    max = [1451.0, 2.0, 100.0, 1.0, 482.0, 1.0, 1.0, 1.0]
+    # ['product_detail_views', 'time_on_page]
+    min = [0.0, 0.0]
+    max = [1451.0, 2.0]
 
-    for i in range(0, 8):
+    for i in range(0, 2):
         hit_features[i] = clip((hit_features[i] - min[i]) / (max[i] - min[i]))
 
     return hit_features
@@ -427,13 +425,13 @@ def min_max_hits(hit_features):
 
 def min_max_sessions(session_features):
     # Max and min used when training for each feature.
-    # ['session_duration', 'unique_pageviews', 'transactions', 'revenue', 'unique_purchases', 'days_since_last_session',
-    #   'search_result_views', 'search_uniques', 'search_depth', 'search_refinements'
-    # ]
-    min = [8.0, 1.0] + [0.0] * 8
-    max = [11196.0, 115.0, 1.0, 4477.0, 5.0, 149.0, 40.0, 22.0, 118.0, 25.0]
+    # ['session_duration', 'unique_pageviews', 'days_since_last_session', 'results_pageviews', 'unique_searches', 'search_depth', 'search_refinements']
+    #
+    #
+    min = [0.0] * 7
+    max = [1.0] * 7
 
-    for i in range(0, 10):
+    for i in range(0, 7):
         session_features[i] = clip(
             (session_features[i] - min[i]) / (max[i] - min[i]))
 
@@ -444,13 +442,15 @@ def min_max_sessions(session_features):
 
 def min_max_users(users_features):
     # Max and min values used when training for each feature.
-    # [ 'session_count', 'device_transactions_per_user', 'device_revenue_per_transaction', 'browser_transactions_per_user',
-    # 'browser_revenue_per_transaction'
+    # ['session_count','device_transactions_per_user','device_revenue_per_transaction','browser_transactions_per_user','browser_revenue_per_transaction'
+    #  'searches_per_session', total_time_on_page', 'average_time_on_page', 'total_products_ordered', 'total_products_viewed', 'city_transactions_per_user', 'city_revenue_per_transaction',
+    #  'diff_between_first_and_last_session_days', 'diff_hours', 'diff_seconds', 'std_dates_days', 'std_dates_hours', 'std_dates_seconds'
+    #     # ]
     # ]
-    min = [1.0, 0.007, 225.0, 0.015, 1540.256]
-    max = [6305, 0.048, 2432.607, 0.061, 4209.32]
+    min = [0.0] * 18
+    max = [1.0] * 18
 
-    for i in range(0, 5):
+    for i in range(0, 18):
         users_features[i] = clip(
             (users_features[i] - min[i]) / (max[i] - min[i]))
 
