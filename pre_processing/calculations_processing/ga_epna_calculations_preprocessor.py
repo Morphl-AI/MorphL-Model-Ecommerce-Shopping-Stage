@@ -587,12 +587,6 @@ def main():
                              f.array(
                                  f.col('time_on_page'),
                                  f.col('product_detail_views'),
-                                 f.col('cart_to_detail_rate'),
-                                 f.col('item_quantity'),
-                                 f.col('item_revenue'),
-                                 f.col('product_adds_to_cart'),
-                                 f.col('product_checkouts'),
-                                 f.col('quantity_added_to_cart')
                              ).alias('hits_features')
                          ).
                          withColumn('hits_features', min_maxer_hits('hits_features')).
@@ -646,9 +640,6 @@ def main():
                                  f.array(
                                      f.col('session_duration'),
                                      f.col('unique_page_views'),
-                                     f.col('transactions'),
-                                     f.col('transaction_revenue'),
-                                     f.col('unique_purchases'),
                                      f.col('days_since_last_session'),
                                      f.col('search_result_views'),
                                      f.col('search_uniques'),
@@ -691,8 +682,16 @@ def main():
                                   f.col('device_revenue_per_transaction'),
                                   f.col('browser_transactions_per_user'),
                                   f.col('browser_revenue_per_transaction'),
+                                  f.col('searches_per_session'),
                                   f.col('total_time_on_page'),
                                   f.col('avg_time_on_page'),
+                                  f.col('total_products_ordered'),
+                                  f.col('total_products_viewed'),
+                                  f.col('city_transactions_per_user'),
+                                  f.col('city_revenue_per_transaction'),
+                                  f.col('diff_first_last_session_days'),
+                                  f.col('diff_first_last_session_hours'),
+                                  f.col('diff_first_last_session_seconds'),
                                   f.col('is_desktop'),
                                   f.col('is_mobile'),
                                   f.col('is_tablet'),
