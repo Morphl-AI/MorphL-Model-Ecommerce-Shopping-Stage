@@ -256,16 +256,16 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
 
 def save_filtered_data(user_df, session_df, hit_df):
 
-    # # Cache and save data to Hadoop
-    # user_df.cache()
-    # session_df.cache()
-    # hit_df.cache()
-    # shopping_stage_df.cache()
+    # Cache and save data to Hadoop
+    user_df.cache()
+    session_df.cache()
+    hit_df.cache()
+  
 
-    # user_df.write.parquet(HDFS_DIR_USER)
-    # session_df.write.parquet(HDFS_DIR_SESSION)
-    # hit_df.write.parquet(HDFS_DIR_HIT)
-    # shopping_stage_df.write.parquet(HDFS_DIR_SHOPPING)
+    user_df.write.parquet(HDFS_DIR_USER)
+    session_df.write.parquet(HDFS_DIR_SESSION)
+    hit_df.write.parquet(HDFS_DIR_HIT)
+   
 
     save_options_ga_epnau_features_filtered = {
         'keyspace': MORPHL_CASSANDRA_KEYSPACE,
