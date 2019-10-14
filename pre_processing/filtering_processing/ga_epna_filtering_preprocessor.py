@@ -63,10 +63,9 @@ def fetch_from_cassandra(c_table_name, spark_session):
 
 def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits_df, product_info_df, session_index_df):
 
-    # Add product info to hits and replace missing values with 0.0
+    product_info_df.cache()
 
-    # Aggregate product data per hit so it doesn't get overwritten
-    product_info_df = (product_info_df
+    hit_features_product_info_df = (product_info_df
                        .groupBy(['client_id', 'day_of_data_capture', 'session_id', 'date_hour_minute'])
                        .agg(
                            f.sum('item_quantity').alias('item_quantity'),
@@ -78,7 +77,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
 
     hits_df = (hits_df
                .join(
-                   product_info_df,
+                   hit_features_product_info_df,
                    ['client_id',
                     'session_id',
                     'day_of_data_capture',
@@ -226,6 +225,44 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                                f.first('session_count').alias('session_count')
                            )
                            )
+
+    total_products_viewed_df = (product_info_df
+                                .where('product_detail_views > 0.0')
+                                .groupBy('client_id')
+                                .agg(
+                                    f.countDistinct('product_name').alias('total_products_viewed')
+                                )
+    )
+
+    total_products_ordered = (product_info_df
+                              .where('item_quantity > 0.0')
+                              .groupBy(['client_id', 'product_name'])
+                              .agg(
+                                  f.sum('item_quantity').alias('product_quantity')
+                              )
+                              .groupBy('client_id')
+                              .agg(
+                                  f.sum('product_quantity').alias('total_products_ordered')
+                              )
+    )
+
+    aggregated_users_df = (aggregated_users_df
+                           .join(
+                               total_products_ordered,
+                               'client_id',
+                               'left_outter'
+                           )
+                           .join(
+                               total_products_viewed_df,
+                               'client_id',
+                               'left_outter'
+                           )
+                           .fillna(
+                               0.0,
+                               ['total_products_viewed', 'total_products_ordered']
+                           )
+                           .repartition(32)
+    )
 
     aggregated_users_df.repartition(32)
 
