@@ -250,12 +250,12 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                            .join(
                                total_products_ordered,
                                'client_id',
-                               'left_outter'
+                               'left_outer'
                            )
                            .join(
                                total_products_viewed_df,
                                'client_id',
-                               'left_outter'
+                               'left_outer'
                            )
                            .fillna(
                                0.0,
