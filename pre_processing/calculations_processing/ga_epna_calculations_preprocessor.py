@@ -379,25 +379,6 @@ def calculate_std_diff_session_dates(user_features, hit_features):
     return user_features
 
 
-def calculate_order_features(user_features, product_features):
-
-    user_order_features = (product_features
-                           .groupBy(['client_id', 'product_name'])
-                           .agg(
-                               f.sum('product_detail_views').alias('total_products_viewed'),
-                               f.sum('item_quantity').alias('total_products_ordered')
-                           )
-                           .repartition(32)
-                           )
-    
-    user_features = (user_features
-                    .join(user_order_features, 'client_id', 'inner')
-                    .repartition(32)
-                    )
-
-    return user_features
-
-
 # Sets values outside of [0.0, 1.0] to 0.0 or 1.0.
 def clip(value):
     if value < 0.0:
@@ -516,11 +497,6 @@ def main():
         'table': 'ga_epnap_features_raw',
         'spark.cassandra.input.fetch.size_in_rows': '150'}
 
-    ga_epnap_features_raw_df = (spark_session.read.format('org.apache.spark.sql.cassandra')
-          .options(**load_options)
-          .load())
-
-
     # Fetch dfs from hadoop
     ga_epnau_features_filtered_df = spark_session.read.parquet(
         HDFS_DIR_USER_FILTERED)
@@ -531,22 +507,21 @@ def main():
     ga_epnah_features_filtered_df = spark_session.read.parquet(
         HDFS_DIR_HIT_FILTERED)
 
-
-    # Calculate revenue by device and revenue by browser columns
     users_df = calculate_browser_device_features(
         ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
     users_df = calculate_city_features(
-        ga_epnau_features_filtered_df, ga_epnas_features_filtered_df
+        users_df, ga_epnas_features_filtered_df
     )
     users_df = calculate_time_on_page_features(
-        ga_epnau_features_filtered_df, ga_epnah_features_filtered_df)
+        users_df, ga_epnah_features_filtered_df)
     users_df = calculate_search_features(
-        ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
+        users_df, ga_epnas_features_filtered_df)
     users_df = calculate_diff_first_last_session_dates(
-        ga_epnau_features_filtered_df, ga_epnah_features_filtered_df)
+        users_df, ga_epnah_features_filtered_df)
     users_df = calculate_std_diff_session_dates(
-        ga_epnau_features_filtered_df, ga_epnah_features_filtered_df
+        users_df, ga_epnah_features_filtered_df
     )
+
 
     # Initialize udfs
     min_maxer_hits = f.udf(min_max_hits, ArrayType(DoubleType()))
