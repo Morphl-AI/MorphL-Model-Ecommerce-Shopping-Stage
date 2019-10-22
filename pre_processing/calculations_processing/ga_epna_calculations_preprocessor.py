@@ -337,7 +337,7 @@ def calculate_std_diff_session_dates(user_features, hit_features):
                              .withColumn(
                                  'date_hour_minute_seconds',
                                  f.unix_timestamp(
-                                     date_formatter('date_hour_Minute'),
+                                     date_formatter('date_hour_minute'),
                                      'yyyy-MM-dd HH:mm'
                                  )
                              )
@@ -457,7 +457,7 @@ def format_date(date):
     date = str(date)
 
     date = date[:4] + '-' + date[4:6] + '-' + \
-        date[6:8] + ' ' + date[8:10] + '-' + date[10:12]
+        date[6:8] + ' ' + date[8:10] + ':' + date[10:12]
 
     return date
 
