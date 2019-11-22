@@ -27,27 +27,28 @@ APPLICATION_NAME = 'batch-inference'
 device = tr.device("cuda") if tr.cuda.is_available() else tr.device("cpu")
 
 # Model class used for predictions.
-
-
 class ModelTargetabilityRNN(nn.Module):
-    def __init__(self, inputShape, hyperParameters={}, **kwargs):
+    def __init__(self, hyperParameters={}, **kwargs):
         super().__init__(**kwargs)
 
         assert type(hyperParameters) == dict
 
         self.hyperParameters = hyperParameters
-
+        
+        self.inShape = hyperParameters["inShape"]
+        self.outShape = hyperParameters["outShape"]
+        
         self.hiddenShape1 = hyperParameters["hiddenShape1"]
-        self.inShape2 = self.hiddenShape1 + int(inputShape[1])
+        self.inShape2 = self.hiddenShape1 + int(self.inShape[1])
         self.hiddenShape2 = hyperParameters["hiddenShape2"]
 
-        self.lstm1 = nn.LSTM(input_size=int(
-            inputShape[2]), hidden_size=self.hiddenShape1, num_layers=1)
+        self.lstm1 = nn.LSTM(input_size=int(self.inShape[2]), hidden_size=self.hiddenShape1, num_layers=1)
         self.lstm2 = nn.LSTM(input_size=self.inShape2,
                              hidden_size=self.hiddenShape2, num_layers=1)
-        self.fc1 = nn.Linear(in_features=self.hiddenShape2 +
-                             int(inputShape[0]), out_features=self.hiddenShape2)
-        self.fc2 = nn.Linear(in_features=self.hiddenShape2, out_features=2)
+        
+        self.fc1 = nn.Linear(in_features=self.hiddenShape2 + int(self.inShape[0]), out_features=self.hiddenShape2)
+        
+        self.fc2 = nn.Linear(in_features=self.hiddenShape2, out_features=self.outShape)
 
     def doLoadWeights(self, loadedState):
         if not "weights" in loadedState and "params" in loadedState:
@@ -174,6 +175,9 @@ class ModelTargetabilityRNN(nn.Module):
         self.loadModel(path, stateKeys=["weights", "model_state"])
 
     def forward(self, trInputs):
+        lastTwo = trInputs["dataSessions"][:, 0, -2 :]
+        trInputs["dataSessions"] = trInputs["dataSessions"][:, :, 0 : -2]  
+        trInputs["dataUsers"] = tr.cat([trInputs["dataUsers"],lastTwo], dim=-1)
         # print(["%s=>%s" % (x, trInputs[x].shape) for x in trInputs])
         hiddens = self.computeHiddens(trInputs)
         # print(hiddens.shape)
@@ -297,9 +301,11 @@ def get_predictions(row):
 
 
 # Load the model
-model = ModelTargetabilityRNN(inputShape=(8, 11, 2), hyperParameters={"randomizeSessionSize": True, "lookaheadSessions": 0, "hiddenShape1": 20,
-                                                                      "hiddenShape2": 30, "inShape": (8, 11, 2), "labelColumnName": "Targetable"
-                                                                      })
+model = ModelTargetabilityRNN(
+    hyperParameters = {"randomizeSessionSize" : True, "hiddenShape1" : 20, "hiddenShape2" : 30, \
+        "inShape" : (10, 9, 2), "outShape" : 2, "labelColumnName" : "Next Shopping Stage Binary Targetable"
+    }
+)
 # Load the model weights.
 model.loadWeights('/opt/models/ga_epna_model_weights.pkl')
 
@@ -373,3 +379,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

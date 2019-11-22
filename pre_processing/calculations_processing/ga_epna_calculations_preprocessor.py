@@ -131,9 +131,9 @@ def clip(value):
 # Normalizes hit data.
 def min_max_hits(hit_features):
     # Max and min used when training for each feature
-    # ['time_on_page', 'product_detail_views']
+    # ['product_detail_views', 'time_on_page']
     min = [0.0, 0.0]
-    max = [1418.0, 2.0]
+    max = [2.0, 1393.0] 
 
     for i in range(0, 2):
         hit_features[i] = clip((hit_features[i] - min[i]) / (max[i] - min[i]))
@@ -145,15 +145,19 @@ def min_max_hits(hit_features):
 
 def min_max_sessions(session_features):
     # Max and min used when training for each feature.
-    # ['session_duration', 'unique_pageviews', 'days_since_last_session',
-    #   'search_result_views', 'search_uniques', 'search_depth', 'search_refinements'
-    # ]
-    min = [13.0,  1.0,  0.0,  0.0,  0.0,  0.0,  0.0]
-    max = [10970.0, 132.0, 127.0, 30.0, 15.0, 165.0, 17.0]
+    #['Days Since Last Session', 'Results Pageviews', 'Search Depth', 'Search Refinements', 'Session Duration', 
+    # 'Site Search Status_Visits With Site Search', 'Site Search Status_Visits Without Site Search', 'Total Unique Searches', 
+    # 'Unique Pageviews', 'User Type_New User', 'User Type_Returning User']
+    min = [0.0,  0.0,  0.0,  0.0, 9.0]
+    max = [138.0, 41.0, 223.0, 23.0, 11466.0]
 
-    for i in range(0, 7):
+    for i in range(0, 5):
         session_features[i] = clip(
             (session_features[i] - min[i]) / (max[i] - min[i]))
+    
+    session_features[7] = clip((session_features[7]  - 0.0)  / (20.0 - 0.0))
+    session_features[8] = clip((session_features[8]  - 1.0)  / (141.0 - 1.0))
+
 
     return session_features
 
@@ -162,15 +166,19 @@ def min_max_sessions(session_features):
 
 def min_max_users(users_features):
     # Max and min values used when training for each feature.
-    # [ 'session_count', 'device_transactions_per_user', 'device_revenue_per_transaction', 'browser_transactions_per_user',
-    # 'browser_revenue_per_transaction'
-    # ]
-    min = [1.0 , 0.01, 225.0 , 0.02, 1540.26]
-    max = [1449.0 , 0.09, 2432.61, 0.06, 4209.32,]
+    # ['Browser Revenue per Transaction', 'Browser Transactions per User', 'Device Category_desktop', 'Device Category_mobile', 
+    # 'Device Category_tablet', 'Device Revenue per Transaction', 'Device Transactions per User', 'Total number of Sessions']
 
-    for i in range(0, 5):
+    users_features[0] = clip((users_features[0]  - 1439.0)  / (3232.28 - 1439.0))
+    users_features[1] = clip((users_features[1]  - 0.02)  / (0.04 - 0.02))
+
+    min = [1021.46, 0.02, 1.0]
+    max = [2385.96, 0.04, 556.0]
+
+ 
+    for i in range(5, 8):
         users_features[i] = clip(
-            (users_features[i] - min[i]) / (max[i] - min[i]))
+            (users_features[i] - min[i - 5]) / (max[i - 5] - min[i - 5]))
 
     return users_features
 
@@ -271,8 +279,8 @@ def main():
                              'session_id',
                              'date_hour_minute',
                              f.array(
-                                 f.col('time_on_page'),
                                  f.col('product_detail_views'),
+                                 f.col('time_on_page'),
                              ).alias('hits_features')
                          ).
                          withColumn('hits_features', min_maxer_hits('hits_features')).
@@ -324,17 +332,17 @@ def main():
                                  'client_id',
                                  'session_id',
                                  f.array(
-                                     f.col('session_duration'),
-                                     f.col('unique_page_views'),
                                      f.col('days_since_last_session'),
                                      f.col('search_result_views'),
-                                     f.col('search_uniques'),
                                      f.col('search_depth'),
                                      f.col('search_refinements'),
-                                     f.col('new_visitor'),
-                                     f.col('returning_visitor'),
+                                     f.col('session_duration'),
                                      f.col('with_site_search'),
                                      f.col('without_site_search'),
+                                     f.col('search_uniques'),
+                                     f.col('unique_page_views'),
+                                     f.col('new_visitor'),
+                                     f.col('returning_visitor'),
                                  ).alias('sessions_features')
                              )
                              .withColumn('sessions_features', min_maxer_sessions('sessions_features'))
@@ -363,14 +371,14 @@ def main():
                           select(
                               'client_id',
                               f.array(
-                                  f.col('session_count'),
-                                  f.col('device_transactions_per_user'),
-                                  f.col('device_revenue_per_transaction'),
-                                  f.col('browser_transactions_per_user'),
                                   f.col('browser_revenue_per_transaction'),
+                                  f.col('browser_transactions_per_user'),
                                   f.col('is_desktop'),
                                   f.col('is_mobile'),
                                   f.col('is_tablet'),
+                                  f.col('device_revenue_per_transaction'),
+                                  f.col('device_transactions_per_user'),
+                                  f.col('session_count'),
                               ).alias('user_features')
                           )
                           .withColumn('user_features', min_maxer_users('user_features'))
@@ -401,3 +409,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
