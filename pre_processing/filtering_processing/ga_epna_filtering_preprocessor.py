@@ -66,14 +66,15 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
     product_info_df.cache()
 
     hit_features_product_info_df = (product_info_df
-                       .groupBy(['client_id', 'day_of_data_capture', 'session_id', 'date_hour_minute'])
-                       .agg(
-                           f.sum('item_quantity').alias('item_quantity'),
-                           f.sum('product_detail_views').alias(
-                               'product_detail_views')
-                       )
-                       .repartition(32)
-                       )
+                                    .groupBy(['client_id', 'day_of_data_capture', 'session_id', 'date_hour_minute'])
+                                    .agg(
+                                        f.sum('item_quantity').alias(
+                                            'item_quantity'),
+                                        f.sum('product_detail_views').alias(
+                                            'product_detail_views')
+                                    )
+                                    .repartition(32)
+                                    )
 
     hits_df = (hits_df
                .join(
@@ -230,21 +231,24 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                                 .where('product_detail_views > 0.0')
                                 .groupBy('client_id')
                                 .agg(
-                                    f.countDistinct('product_name').alias('total_products_viewed')
+                                    f.countDistinct('product_name').alias(
+                                        'total_products_viewed')
                                 )
-    )
+                                )
 
     total_products_ordered = (product_info_df
                               .where('item_quantity > 0.0')
                               .groupBy(['client_id', 'product_name'])
                               .agg(
-                                  f.sum('item_quantity').alias('product_quantity')
+                                  f.sum('item_quantity').alias(
+                                      'product_quantity')
                               )
                               .groupBy('client_id')
                               .agg(
-                                  f.sum('product_quantity').alias('total_products_ordered')
+                                  f.sum('product_quantity').alias(
+                                      'total_products_ordered')
                               )
-    )
+                              )
 
     aggregated_users_df = (aggregated_users_df
                            .join(
@@ -262,7 +266,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                                ['total_products_viewed', 'total_products_ordered']
                            )
                            .repartition(32)
-    )
+                           )
 
     aggregated_users_df.repartition(32)
 
@@ -297,12 +301,10 @@ def save_filtered_data(user_df, session_df, hit_df):
     user_df.cache()
     session_df.cache()
     hit_df.cache()
-  
 
     user_df.write.parquet(HDFS_DIR_USER)
     session_df.write.parquet(HDFS_DIR_SESSION)
     hit_df.write.parquet(HDFS_DIR_HIT)
-   
 
     save_options_ga_epnau_features_filtered = {
         'keyspace': MORPHL_CASSANDRA_KEYSPACE,
@@ -344,29 +346,28 @@ def main():
 
     spark_session = get_spark_session()
 
-    ga_epnau_features_raw_df = fetch_from_cassandra(
-        'ga_epnau_features_raw', spark_session
-    )
+    ga_epnau_features_raw_df = fetch_from_cassandra('ga_epnau_features_raw', spark_session).where(
+        "day_of_data_capture = '{}'".format(PREDICTION_DAY_AS_STR))
 
-    ga_epnas_features_filtered_df = fetch_from_cassandra(
-        'ga_epnas_features_raw', spark_session
-    )
+    current_ids_df = ga_epnau_features_raw_df.select('client_id')
 
-    ga_epnah_features_raw = fetch_from_cassandra(
-        'ga_epnah_features_raw', spark_session
-    )
+    ga_epnas_features_filtered_df = fetch_from_cassandra('ga_epnas_features_raw', spark_session).join(
+        current_ids_df, 'client_id', 'inner').repartition(32)
 
-    mobile_brand_df = fetch_from_cassandra(
-        'ga_epna_users_mobile_brand', spark_session)
+    ga_epnah_features_raw = fetch_from_cassandra('ga_epnah_features_raw', spark_session).join(
+        current_ids_df, 'client_id', 'inner').repartition(32)
 
-    shopping_stages_df = fetch_from_cassandra(
-        'ga_epna_sessions_shopping_stages', spark_session)
+    mobile_brand_df = fetch_from_cassandra('ga_epna_users_mobile_brand', spark_session).join(
+        current_ids_df, 'client_id', 'inner').repartition(32)
 
-    ga_epnap_features_raw = fetch_from_cassandra(
-        'ga_epnap_features_raw', spark_session)
+    shopping_stages_df = fetch_from_cassandra('ga_epna_sessions_shopping_stages', spark_session).join(
+        current_ids_df, 'client_id', 'inner').repartition(32)
 
-    session_index_df = fetch_from_cassandra(
-        'ga_epna_session_index', spark_session)
+    ga_epnap_features_raw = fetch_from_cassandra('ga_epnap_features_raw', spark_session).join(
+        current_ids_df, 'client_id', 'inner').repartition(32)
+
+    session_index_df = fetch_from_cassandra('ga_epna_session_index', spark_session).join(
+        current_ids_df, 'client_id', 'inner').repartition(32)
 
     # Get all the filtered dfs.
     filtered_data_dfs = (filter_data(
