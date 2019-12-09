@@ -351,16 +351,7 @@ def main():
     log4j = spark_session.sparkContext._jvm.org.apache.log4j
     log4j.LogManager.getRootLogger().setLevel(log4j.Level.ERROR)
 
-    users_ingested = fetch_from_cassandra(
-        'ga_epnau_features_raw', spark_session)
-
-    # Get the ids of users from the current day of predictions.
-    current_day_ids = users_ingested.select('client_id').where(
-        "day_of_data_capture = '{}'".format(PREDICTION_DAY_AS_STR))
-
-    # Load the batch inference data from Cassandra and filter it by the client ids from the prediction date
-    batch_inference_data = fetch_from_cassandra('ga_epna_batch_inference_data', spark_session).join(
-        current_day_ids, 'client_id', 'inner')
+    batch_inference_data = fetch_from_cassandra('ga_epna_batch_inference_data', spark_session)
 
     # Convert the dataframe to an rdd so we can apply the mapping function to it
     ga_epna_predictions = (
