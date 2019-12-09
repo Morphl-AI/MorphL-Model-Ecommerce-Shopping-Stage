@@ -1,6 +1,6 @@
 from os import getenv
 from pyspark.sql import functions as f, SparkSession, Window
-from pyspark.sql.types import ArrayType, DoubleType, StringType
+from pyspark.sql.types import ArrayType, DoubleType, StructType, StructField, IntegerType, StringType
 
 
 HDFS_PORT = 9000
@@ -19,6 +19,10 @@ HDFS_DIR_USER_FILTERED = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDIC
 HDFS_DIR_SESSION_FILTERED = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnas_filtered'
 HDFS_DIR_HIT_FILTERED = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnah_filtered'
 
+
+BROWSER_STATISTICS_CSV_FILE = '/opt/models/statistics/browser_statistics.csv'
+MOBILE_BRAND_STATISTICS_CSV_FILE = '/opt/models/statistics/mobile_brand_statistics.csv'
+CITY_STATISTICS_CSV_FILE = '/opt/models/statistics/city_statistics.csv'
 # Initialize the spark sessions and return it.
 
 
@@ -40,129 +44,82 @@ def get_spark_session():
     return spark_session
 
 
-def calculate_browser_device_features(users_df, sessions_df):
+def calculate_browser_device_features(users_df, spark_session):
 
-    # Merge sessions and users dataframes.
-    users_sessions_df = (users_df
-                         .join(
-                             sessions_df,
-                             'client_id',
-                             'inner'))
+    schema_browser = StructType([StructField('index', IntegerType(), True),
+                                 StructField('browser', StringType(), True),
+                                 StructField(
+                                     'browser_transactions_per_user', DoubleType(), True),
+                                 StructField('browser_revenue_per_transaction', DoubleType(), True)])
 
-    # Cache df since it will be used to later.
-    users_sessions_df.cache()
+    schema_mobile_brand = StructType([StructField('index', IntegerType(), True),
+                                      StructField(
+                                          'mobile_device_branding', StringType(), True),
+                                      StructField(
+                                          'device_transactions_per_user', DoubleType(), True),
+                                      StructField('device_revenue_per_transaction', DoubleType(), True)])
 
-    # Aggregate transactions and revenue by mobile device branding.
-    transactions_by_device_df = (users_sessions_df
-                                 .groupBy('mobile_device_branding')
-                                 .agg(
-                                     f.sum('transactions').alias(
-                                         'transactions'),
-                                     f.sum('transaction_revenue').alias(
-                                         'transaction_revenue'),
-                                     f.countDistinct(
-                                         'client_id').alias('users')
-                                 ))
+    browser_statistics_df = spark_session.read.csv(
+        BROWSER_STATISTICS_CSV_FILE, header=True, schema=schema_browser).drop('index')
+    mobile_brand_statistics_df = spark_session.read.csv(
+        MOBILE_BRAND_STATISTICS_CSV_FILE, header=True, schema=schema_mobile_brand).drop('index')
 
-    # Calculate device revenue per transaction and device transactions per user columns.
-    transactions_by_device_df = (transactions_by_device_df
-                                 .withColumn(
-                                     'device_revenue_per_transaction',
-                                     transactions_by_device_df.transaction_revenue /
-                                     (transactions_by_device_df.transactions + 1e-5)
-                                 )
-                                 .withColumn(
-                                     'device_transactions_per_user',
-                                     transactions_by_device_df.transactions / transactions_by_device_df.users
-                                 )
-                                 .drop('transactions', 'transaction_revenue')
-                                 )
+    users_df = (
+        users_df
+        .join(
+            mobile_brand_statistics_df,
+            'mobile_device_branding',
+            'left_outer'
+        )
+        .join(
+            browser_statistics_df,
+            'browser',
+            'left_outer'
+        )
+        .fillna(
+            0.0,
+            [
+                'browser_revenue_per_transaction',
+                'browser_transactions_per_user',
+                'device_revenue_per_transaction',
+                'device_transactions_per_user',
+            ]
+        )
+        .repartition(32)
+    )
 
-    # Aggregate transactions and revenue by browser.
-    transactions_by_browser_df = (users_sessions_df
-                                  .groupBy('browser')
-                                  .agg(
-                                      f.sum('transactions').alias(
-                                          'transactions'),
-                                      f.sum('transaction_revenue').alias(
-                                          'transaction_revenue'),
-                                      f.countDistinct(
-                                          'client_id').alias('users')
-                                  ))
-
-    # Calculate browser revenue per transaction and browser transactions per user columns.
-    transactions_by_browser_df = (transactions_by_browser_df
-                                  .withColumn(
-                                      'browser_revenue_per_transaction',
-                                      transactions_by_browser_df.transaction_revenue /
-                                      (transactions_by_browser_df.transactions + 1e-5)
-                                  )
-                                  .withColumn(
-                                      'browser_transactions_per_user',
-                                      transactions_by_browser_df.transactions / transactions_by_browser_df.users
-                                  )
-                                  .drop('transactions', 'transaction_revenue')
-                                  )
-
-    # Merge new columns into main df and return them
-    return (users_df
-            .join(
-                transactions_by_device_df,
-                'mobile_device_branding',
-                'inner'
-            )
-            .join(
-                transactions_by_browser_df,
-                'browser',
-                'inner'
-            ).repartition(32)
-            )
+    return users_df
 
 
-def calculate_city_features(users_df, sessions_df):
+def calculate_city_features(users_df, spark_session):
 
-    # Merge sessions and users dataframes.
-    users_sessions_df = (users_df
-                         .join(
-                             sessions_df,
-                             'client_id',
-                             'inner'))
+    schema_city = StructType([StructField('index', IntegerType(), True),
+                              StructField('city', StringType(), True),
+                              StructField(
+        'city_transactions_per_user', DoubleType(), True),
+        StructField('city_revenue_per_transaction', DoubleType(), True)])
 
-    # Aggregate transactions and revenue by city.
-    transactions_by_city_df = (users_sessions_df
-                               .groupBy('city')
-                               .agg(
-                                   f.sum('transactions').alias(
-                                       'transactions'),
-                                   f.sum('transaction_revenue').alias(
-                                       'transaction_revenue'),
-                                   f.countDistinct(
-                                       'client_id').alias('users')
-                               ))
+    city_statistics_df = spark_session.read.csv(
+        CITY_STATISTICS_CSV_FILE, header=True, schema=schema_city).drop('index')
 
-    # Calculate city revenue per transaction and city transactions per user columns.
-    transactions_by_city_df = (transactions_by_city_df
-                               .withColumn(
-                                   'city_revenue_per_transaction',
-                                   transactions_by_city_df.transaction_revenue /
-                                   (transactions_by_city_df.transactions + 1e-5)
-                               )
-                               .withColumn(
-                                   'city_transactions_per_user',
-                                   transactions_by_city_df.transactions / transactions_by_city_df.users
-                               )
-                               .drop('transactions', 'transaction_revenue')
-                               )
+    users_df = (
+        users_df
+        .join(
+            city_statistics_df,
+            'city',
+            'left_outer'
+        )
+        .fillna(
+            0.0,
+            [
+                'city_revenue_per_transaction',
+                'city_transactions_per_user',
+            ]
+        )
+        .repartition(32)
+    )
 
-    # Merge new columns into main df and return them
-    return (users_df
-            .join(
-                transactions_by_city_df,
-                'city',
-                'inner'
-            )
-            .repartition(32)
-            )
+    return users_df
 
 
 def calculate_time_on_page_features(user_features, hit_features):
@@ -508,9 +465,9 @@ def main():
         HDFS_DIR_HIT_FILTERED)
 
     users_df = calculate_browser_device_features(
-        ga_epnau_features_filtered_df, ga_epnas_features_filtered_df)
+        ga_epnau_features_filtered_df, spark_session)
     users_df = calculate_city_features(
-        users_df, ga_epnas_features_filtered_df
+        users_df, spark_session
     )
     users_df = calculate_time_on_page_features(
         users_df, ga_epnah_features_filtered_df)
@@ -521,7 +478,6 @@ def main():
     users_df = calculate_std_diff_session_dates(
         users_df, ga_epnah_features_filtered_df
     )
-
 
     # Initialize udfs
     min_maxer_hits = f.udf(min_max_hits, ArrayType(DoubleType()))
