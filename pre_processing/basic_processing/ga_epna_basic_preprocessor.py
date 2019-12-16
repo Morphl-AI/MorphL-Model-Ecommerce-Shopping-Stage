@@ -40,9 +40,7 @@ class BasicPreprocessor:
         field_baselines = {}
 
         # device_category: the type of device associated to the user: tablet, mobile or desktop;
-        # browser: the type of browser used by a user;
-        # revenue_per_user: the amount of money a user has spent on the site;
-        # transactions_per_user: the number of transactions a user completed on the site.
+        # browser: the type of browser used by a user.
         field_baselines['ga_epnau_df'] = [
             {'field_name': 'device_category',
              'original_name': 'ga:deviceCategory',
@@ -60,9 +58,6 @@ class BasicPreprocessor:
 
         # session_duration: the total duration of a session;
         # unique_page_views: the number of unique pageviews during a session;
-        # transactions: the number of transactions completed in a session;
-        # transaction_revenue: the amount of money spent on the transactions in a session;
-        # unique_purchases: the number of unique items bought by the user in a session;
         # search_result_views: the number of times a search result page was viewed in a session;
         # search_uniques: total number of unique keywords from internal searches during a session;
         # search_depth: total number of subsequent page views made after an internal search;
@@ -77,14 +72,6 @@ class BasicPreprocessor:
              },
             {'field_name': 'unique_page_views',
              'original_name': 'ga:uniquePageviews',
-             'needs_conversion': True,
-             },
-            {'field_name': 'transactions',
-             'original_name': 'ga:transactions',
-             'needs_conversion': True,
-             },
-            {'field_name': 'transaction_revenue',
-             'original_name': 'ga:transactionRevenue',
              'needs_conversion': True,
              },
             {'field_name': 'search_result_views',
@@ -113,10 +100,7 @@ class BasicPreprocessor:
              },
         ]
 
-        # time_on_page: the amount of time a user spent on the page;
-        # date_hour_minute: the date, hour and minute the hit occured at;
-        # user_type: a boolean signifying wether the user is new or returning;
-        # product_detail_views: number of time the product details were viewed.
+        # time_on_page: the amount of time a user spent on the page.
         field_baselines['ga_epnah_df'] = [
             {'field_name': 'time_on_page',
              'original_name': 'ga:timeOnPage',
@@ -125,12 +109,7 @@ class BasicPreprocessor:
         ]
 
 
-        # quantity_added_to_cart: number of product units added to the shopping cart ;
-        # product_adds_to_cart: number of times a product was added to the shopping cart;
-        # product_checkouts: number of times a product was included in the check-out process;
         # item_quantity: number of items purchased;
-        # item_revenue: total revenue from purchased product items;
-        # cart_to_detail_rate: product adds divided by views of product details;
         # product_detail_views: number of times users viewed the product-detail page.
         field_baselines['ga_epnap_df'] = [
             {'field_name': 'item_quantity',
