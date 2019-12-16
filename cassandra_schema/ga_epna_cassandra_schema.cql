@@ -94,8 +94,6 @@ CREATE TABLE morphl.ga_epnas_features_raw (
   day_of_data_capture date,
   session_duration double, 
   unique_page_views double,
-  transactions double, 
-  transaction_revenue double,
   search_result_views double,
   search_uniques double, 
   search_depth double,
@@ -134,6 +132,7 @@ DROP TABLE IF EXISTS morphl.ga_epnau_features_filtered;
 CREATE TABLE morphl.ga_epnau_features_filtered (
     client_id text,
     session_count int,
+    first_collected_index int,
     device_category text,
     browser text,
     city text,
@@ -155,10 +154,7 @@ CREATE TABLE morphl.ga_epnas_features_filtered (
   search_uniques double, 
   search_depth double,
   search_refinements double,
-  search_used text,
-  transactions double, 
-  transaction_revenue double,
-  session_index int, 
+  search_used text, 
   PRIMARY KEY ((client_id), session_id)
 );
 
