@@ -23,9 +23,9 @@ HDFS_DIR_HIT_FILTERED = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICT
 BROWSER_STATISTICS_CSV_FILE = '/opt/models/statistics/browser_statistics.csv'
 MOBILE_BRAND_STATISTICS_CSV_FILE = '/opt/models/statistics/mobile_brand_statistics.csv'
 CITY_STATISTICS_CSV_FILE = '/opt/models/statistics/city_statistics.csv'
+
+
 # Initialize the spark sessions and return it.
-
-
 def get_spark_session():
     spark_session = (
         SparkSession.builder
@@ -44,7 +44,8 @@ def get_spark_session():
     return spark_session
 
 
-def calculate_browser_device_features(users_df, spark_session):
+# Add browser and device features from statistics csvs
+def add_browser_device_features(users_df, spark_session):
 
     schema_browser = StructType([StructField('index', IntegerType(), True),
                                  StructField('browser', StringType(), True),
@@ -91,13 +92,14 @@ def calculate_browser_device_features(users_df, spark_session):
     return users_df
 
 
-def calculate_city_features(users_df, spark_session):
+# Add city features from csv file
+def add_city_features(users_df, spark_session):
 
     schema_city = StructType([StructField('index', IntegerType(), True),
                               StructField('city', StringType(), True),
                               StructField(
-        'city_transactions_per_user', DoubleType(), True),
-        StructField('city_revenue_per_transaction', DoubleType(), True)])
+                                  'city_transactions_per_user', DoubleType(), True),
+                              StructField('city_revenue_per_transaction', DoubleType(), True)])
 
     city_statistics_df = spark_session.read.csv(
         CITY_STATISTICS_CSV_FILE, header=True, schema=schema_city).drop('index')
@@ -122,21 +124,7 @@ def calculate_city_features(users_df, spark_session):
     return users_df
 
 
-def calculate_time_on_page_features(user_features, hit_features):
-    time_on_page_features_df = (hit_features
-                                .groupBy('client_id')
-                                .agg(
-                                    f.sum('time_on_page').alias(
-                                        'total_time_on_page'),
-                                    f.mean('time_on_page').alias(
-                                        'avg_time_on_page')
-                                )
-                                .select('client_id', 'total_time_on_page', 'avg_time_on_page')
-                                )
-
-    return user_features.join(time_on_page_features_df, 'client_id', 'inner')
-
-
+# Calculate 'searches_per_session.
 def calculate_search_features(user_features, session_features):
     search_features = (session_features
                        .drop_duplicates(subset=['client_id', 'session_id'])
@@ -157,185 +145,6 @@ def calculate_search_features(user_features, session_features):
     return user_features.join(search_features, 'client_id', 'inner')
 
 
-def calculate_diff_first_last_session_dates(user_features, hit_features):
-
-    date_formatter = f.udf(format_date, StringType())
-
-    session_time_features = (hit_features
-                             .drop_duplicates(subset=['client_id', 'session_id'])
-                             .groupBy('client_id')
-                             .agg(
-                                 f.min('date_hour_minute').alias(
-                                     'first_session_date'),
-                                 f.max('date_hour_minute').alias(
-                                     'last_session_date')
-                             )
-                             .withColumn(
-                                 'first_session_date',
-                                 f.unix_timestamp(
-                                     date_formatter('first_session_date'),
-                                     'yyyy-MM-dd HH:mm'
-                                 )
-                             )
-                             .withColumn(
-                                 'last_session_date',
-                                 f.unix_timestamp(
-                                     date_formatter('last_session_date'),
-                                     'yyyy-MM-dd HH:mm'
-                                 )
-                             )
-                             .repartition(32)
-                             )
-
-    session_time_features = (session_time_features
-                             .withColumn(
-                                 'diff_first_last_session_seconds',
-                                 session_time_features['last_session_date'] -
-                                 session_time_features['first_session_date']
-                             )
-
-                             )
-
-    session_time_features = (session_time_features
-                             .withColumn(
-                                 'diff_first_last_session_hours',
-                                 f.round(
-                                     session_time_features['diff_first_last_session_seconds'] / 3600)
-                             )
-                             .withColumn(
-                                 'diff_first_last_session_days',
-                                 f.round(
-                                     session_time_features['diff_first_last_session_seconds'] / 86400)
-                             )
-                             .drop('first_session_date', 'last_session_date')
-                             .repartition(32)
-                             )
-
-    user_features = (user_features
-                     .join(session_time_features, 'client_id', 'inner')
-                     .repartition(32)
-                     )
-
-    return user_features
-
-
-def calculate_diff_first_last_session_dates(user_features, hit_features):
-
-    date_formatter = f.udf(format_date, StringType())
-
-    session_time_features = (hit_features
-                             .drop_duplicates(subset=['client_id', 'session_id'])
-                             .groupBy('client_id')
-                             .agg(
-                                 f.min('date_hour_minute').alias(
-                                     'first_session_date'),
-                                 f.max('date_hour_minute').alias(
-                                     'last_session_date')
-                             )
-                             .withColumn(
-                                 'first_session_date',
-                                 f.unix_timestamp(
-                                     date_formatter('first_session_date'),
-                                     'yyyy-MM-dd HH:mm'
-                                 )
-                             )
-                             .withColumn(
-                                 'last_session_date',
-                                 f.unix_timestamp(
-                                     date_formatter('last_session_date'),
-                                     'yyyy-MM-dd HH:mm'
-                                 )
-                             )
-                             .repartition(32)
-                             )
-
-    session_time_features = (session_time_features
-                             .withColumn(
-                                 'diff_first_last_session_seconds',
-                                 session_time_features['last_session_date'] -
-                                 session_time_features['first_session_date']
-                             )
-
-                             )
-
-    session_time_features = (session_time_features
-                             .withColumn(
-                                 'diff_first_last_session_hours',
-                                 f.round(
-                                     session_time_features['diff_first_last_session_seconds'] / 3600)
-                             )
-                             .withColumn(
-                                 'diff_first_last_session_days',
-                                 f.round(
-                                     session_time_features['diff_first_last_session_seconds'] / 86400)
-                             )
-                             .drop('first_session_date', 'last_session_date')
-                             .repartition(32)
-                             )
-
-    user_features = (user_features
-                     .join(session_time_features, 'client_id', 'inner')
-                     .repartition(32)
-                     )
-
-    return user_features
-
-
-def calculate_std_diff_session_dates(user_features, hit_features):
-    date_formatter = f.udf(format_date, StringType())
-
-    session_time_features = (hit_features
-                             .drop_duplicates(subset=['client_id', 'session_id'])
-                             .groupBy(['client_id', 'session_id'])
-                             .agg(
-                                 f.first('date_hour_minute').alias(
-                                     'date_hour_minute')
-                             )
-                             .withColumn(
-                                 'date_hour_minute_seconds',
-                                 f.unix_timestamp(
-                                     date_formatter('date_hour_minute'),
-                                     'yyyy-MM-dd HH:mm'
-                                 )
-                             )
-                             .repartition(32)
-                             )
-
-    session_time_features = (session_time_features
-                             .withColumn(
-                                 'date_hour_minute_hours',
-                                 f.round(
-                                     session_time_features['date_hour_minute_seconds'] / 3600)
-                             )
-                             .withColumn(
-                                 'date_hour_minute_days',
-                                 f.round(
-                                     session_time_features['date_hour_minute_seconds'] / 86400
-                                 )
-                             )
-                             .repartition(32)
-                             )
-    session_time_features = (session_time_features
-                             .groupBy('client_id')
-                             .agg(
-                                 f.stddev_pop('date_hour_minute_seconds').alias(
-                                     'std_between_session_dates_seconds'),
-                                 f.stddev_pop('date_hour_minute_hours').alias(
-                                     'std_between_session_dates_hours'),
-                                 f.stddev_pop('date_hour_minute_days').alias(
-                                     'std_between_session_dates_days')
-                             )
-                             .repartition(32)
-                             )
-
-    user_features = (user_features
-                     .join(session_time_features, 'client_id', 'inner')
-                     .repartition(32)
-                     )
-
-    return user_features
-
-
 # Sets values outside of [0.0, 1.0] to 0.0 or 1.0.
 def clip(value):
     if value < 0.0:
@@ -348,26 +157,25 @@ def clip(value):
 
 # Normalizes hit data.
 def min_max_hits(hit_features):
-    # Max and min used when training for each feature
-    # ['product_detail_views', 'time_on_page]
+    # ['time_on_page', 'product_detail_views']
     min = [0.0, 0.0]
-    max = [1451.0, 2.0]
+    max = [1510.0, 2.0]
 
     for i in range(0, 2):
         hit_features[i] = clip((hit_features[i] - min[i]) / (max[i] - min[i]))
 
     return hit_features
 
+
 # Normalizes session data.
-
-
 def min_max_sessions(session_features):
-    # Max and min used when training for each feature.
-    # ['session_duration', 'unique_pageviews', 'days_since_last_session', 'results_pageviews', 'unique_searches', 'search_depth', 'search_refinements']
-    #
-    #
-    min = [0.0] * 7
-    max = [1.0] * 7
+    # [
+    # 'days_since_last_session', 'results_pageviews', 'search_depth', 'search_refinements',
+    # 'session_duration', 'site_search_status_visit_with_site_search', 'site_search_status_visit_without_site_search',
+    # 'unique_searches', 'unique_pageviews'
+    # ]
+    min = [0.0, 0.0, 0.0, 0.0, 0.7, 0.0, 0.0, 0.0, 1.0]
+    max = [130.0, 37.0, 135.0, 22.0, 11500.0, 1.0, 1.0, 20.0, 110.0]
 
     for i in range(0, 7):
         session_features[i] = clip(
@@ -375,18 +183,21 @@ def min_max_sessions(session_features):
 
     return session_features
 
+
 # Normalizes user data.
-
-
 def min_max_users(users_features):
-    # Max and min values used when training for each feature.
-    # ['session_count','device_transactions_per_user','device_revenue_per_transaction','browser_transactions_per_user','browser_revenue_per_transaction'
-    #  'searches_per_session', total_time_on_page', 'average_time_on_page', 'total_products_ordered', 'total_products_viewed', 'city_transactions_per_user', 'city_revenue_per_transaction',
-    #  'diff_between_first_and_last_session_days', 'diff_hours', 'diff_seconds', 'std_dates_days', 'std_dates_hours', 'std_dates_seconds'
-    #     # ]
+    # [
+    # 'browser_revenue_per_transaction', browser_transactions_per_user', 'city_revenue_per_transaction', 'city_transactions_per_user',
+    # 'device_category_desktop', 'device_category_mobile', 'device_category_tablet', 'device_revenue_per_transaction', 'device_transactions_per_user',
+    # 'searches_per_session', 'total_number_of_sessions', 'total_products_ordered', 'total_products_viewed',
+    # 'user_type_new_user', 'user_type_returning_user'
     # ]
-    min = [0.0] * 18
-    max = [1.0] * 18
+
+    min = [1445.3, 0.038495857, 0.0, 0.0, 0.0, 0.0, 0.0,
+           1000.0589, 0.027276857, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0]
+
+    max = [3274.44, 0.073248476, 5707.6587, 0.100638375, 1.0, 1.0, 1.0,
+           2391.0286, 0.06703993, 13.0, 6121.0, 32.0, 1666.0, 1.0, 1.0]
 
     for i in range(0, 18):
         users_features[i] = clip(
@@ -395,6 +206,7 @@ def min_max_users(users_features):
     return users_features
 
 
+# Fills up session arrays with fake hits so we have a square array for the model.
 def pad_with_zero(hits_features):
     max_hit_count = 0
     for session in hits_features:
@@ -403,25 +215,13 @@ def pad_with_zero(hits_features):
 
     for session_count in range(len(hits_features)):
         hits_features[session_count] = hits_features[session_count] + \
-            [[0.0] * 8] * \
+            [[0.0] * 2] * \
             (max_hit_count - len(hits_features[session_count]))
 
     return hits_features
 
 
-def format_date(date):
-
-    date = str(date)
-
-    date = date[:4] + '-' + date[4:6] + '-' + \
-        date[6:8] + ' ' + date[8:10] + ':' + date[10:12]
-
-    return date
-
-
 # Save array data to Cassandra.
-
-
 def save_data(hits_data, hits_num_data, session_data, user_data):
 
     ga_epna_batch_inference_data = (hits_data
@@ -464,20 +264,13 @@ def main():
     ga_epnah_features_filtered_df = spark_session.read.parquet(
         HDFS_DIR_HIT_FILTERED)
 
-    users_df = calculate_browser_device_features(
+    users_df = add_browser_device_features(
         ga_epnau_features_filtered_df, spark_session)
-    users_df = calculate_city_features(
+    users_df = add_city_features(
         users_df, spark_session
     )
-    users_df = calculate_time_on_page_features(
-        users_df, ga_epnah_features_filtered_df)
     users_df = calculate_search_features(
         users_df, ga_epnas_features_filtered_df)
-    users_df = calculate_diff_first_last_session_dates(
-        users_df, ga_epnah_features_filtered_df)
-    users_df = calculate_std_diff_session_dates(
-        users_df, ga_epnah_features_filtered_df
-    )
 
     # Initialize udfs
     min_maxer_hits = f.udf(min_max_hits, ArrayType(DoubleType()))
@@ -502,12 +295,12 @@ def main():
     #
     # user[
     #     session[
-    #         hit[1.0, 2.0, 3.0, 4.0, 0.5, 0.6, 0.7, 0.8],
-    #         hit[5.0, 6.0, 7.0, 8.0, 0.9, 0.1, 0.2, 0.3]
+    #         hit[1.0, 2.0],
+    #         hit[5.0, 6.0]
     #     ],
     #     session[
-    #         hit[9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0],
-    #         hit[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    #         hit[9.0, 10.0],
+    #         hit[0.0, 0.0]
     #     ]
     # ]
     ga_epna_data_hits = (ga_epnah_features_filtered_df
@@ -557,29 +350,19 @@ def main():
                                  f.when(f.col('search_used') == 'Visits Without Site Search', 1.0).otherwise(
                                      0.0)
                              )
-                             .withColumn('new_visitor',
-                                         f.when(f.col('session_index')
-                                                == 1, 1.0).otherwise(0.0)
-                                         )
-                             .withColumn('returning_visitor',
-                                         f.when(f.col('session_index')
-                                                > 1, 1.0).otherwise(0.0)
-                                         )
                              .select(
                                  'client_id',
                                  'session_id',
                                  f.array(
-                                     f.col('session_duration'),
-                                     f.col('unique_page_views'),
                                      f.col('days_since_last_session'),
                                      f.col('search_result_views'),
-                                     f.col('search_uniques'),
                                      f.col('search_depth'),
                                      f.col('search_refinements'),
+                                     f.col('session_duration'),
                                      f.col('with_site_search'),
                                      f.col('without_site_search'),
-                                     f.col('new_visitor'),
-                                     f.col('returning_visitor'),
+                                     f.col('search_uniques'),
+                                     f.col('unique_page_views'),
                                  ).alias('sessions_features')
                              )
                              .withColumn('sessions_features', min_maxer_sessions('sessions_features'))
@@ -605,27 +388,32 @@ def main():
                               'is_desktop', f.when(
                                   f.col('device_category') == 'desktop', 1.0).otherwise(0.0)
                           ).
+                          withColumn(
+                              'user_type_new_user', f.when(
+                                  f.col('first_collected_index') == 1.0, 1.0).otherwise(0.0)
+                          ).
+                          withColumn(
+                              'user_type_returning_user', f.when(
+                                  f.col('first_collected_index') > 1.0, 1.0).otherwise(0.0)
+                          ).
                           select(
                               'client_id',
                               f.array(
-                                  f.col('session_count'),
-                                  f.col('device_transactions_per_user'),
-                                  f.col('device_revenue_per_transaction'),
-                                  f.col('browser_transactions_per_user'),
                                   f.col('browser_revenue_per_transaction'),
-                                  f.col('searches_per_session'),
-                                  f.col('total_time_on_page'),
-                                  f.col('avg_time_on_page'),
-                                  f.col('total_products_ordered'),
-                                  f.col('total_products_viewed'),
-                                  f.col('city_transactions_per_user'),
+                                  f.col('browser_transactions_per_user'),
                                   f.col('city_revenue_per_transaction'),
-                                  f.col('diff_first_last_session_days'),
-                                  f.col('diff_first_last_session_hours'),
-                                  f.col('diff_first_last_session_seconds'),
+                                  f.col('city_transactions_per_user'),
                                   f.col('is_desktop'),
                                   f.col('is_mobile'),
                                   f.col('is_tablet'),
+                                  f.col('device_revenue_per_transaction'),
+                                  f.col('device_transactions_per_user'),
+                                  f.col('searches_per_session'),
+                                  f.col('session_count'),
+                                  f.col('total_products_ordered'),
+                                  f.col('total_products_viewed'),
+                                  f.col('user_type_new_user'),
+                                  f.col('user_type_returning_user')
                               ).alias('user_features')
                           )
                           .withColumn('user_features', min_maxer_users('user_features'))
