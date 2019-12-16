@@ -18,7 +18,6 @@ MORPHL_CASSANDRA_KEYSPACE = getenv('MORPHL_CASSANDRA_KEYSPACE')
 HDFS_DIR_USER = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnau_filtered'
 HDFS_DIR_SESSION = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnas_filtered'
 HDFS_DIR_HIT = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epnah_filtered'
-HDFS_DIR_SHOPPING = f'hdfs://{MORPHL_SERVER_IP_ADDRESS}:{HDFS_PORT}/{PREDICTION_DAY_AS_STR}_{UNIQUE_HASH}_ga_epna_shopping_stages_filtered'
 
 # Initialize the spark sessions and return it.
 
@@ -97,22 +96,17 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                )
 
     # Get the number of sessions a user has
-    user_session_counts = session_index_df.groupBy(
-        'client_id').agg(f.max('session_index').alias('session_count'))
+    user_session_counts = (session_index_df
+                           .groupBy('client_id')
+                           .agg(
+                               f.max('session_index').alias('session_count'),
+                               f.min('session_index').alias('first_collected_index')
+                           )
+                           )
 
     # Add the session count column to the users dataframe
     users_df = users_df.join(
         user_session_counts, 'client_id', 'inner').repartition(32)
-
-    # Add the session index to each session
-    sessions_df = (sessions_df
-                   .join(
-                       session_index_df.drop('day_of_data_capture'),
-                       ['client_id', 'session_id'],
-                       'inner'
-                   )
-                   .repartition(32)
-                   )
 
     # Get the session ids that are present in all tables.
     sessions_df_session_ids = sessions_df.select('session_id').distinct()
@@ -148,7 +142,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
 
     # Only keep shopping stage info that we have hit and session data on.
     shopping_stages_filtered_by_session_id_df = (shopping_stages_df.
-                                                 drop('day_of_data_capture').
+                                                 select('client_id', 'session_id').
                                                  join(complete_session_ids,
                                                       'session_id', 'inner')
                                                  )
@@ -223,7 +217,8 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                                    'device_category'),
                                f.first('browser').alias('browser'),
                                f.first('city').alias('city'),
-                               f.first('session_count').alias('session_count')
+                               f.first('session_count').alias('session_count'),
+                               f.first('first_collected_index').alias('first_collected_index')
                            )
                            )
 
