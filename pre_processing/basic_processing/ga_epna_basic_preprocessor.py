@@ -29,9 +29,6 @@ class BasicPreprocessor:
         primary_key['ga_epnah_df'] = [
             'client_id', 'day_of_data_capture', 'session_id', 'date_hour_minute']
 
-        primary_key['ga_epnap_df'] = ['client_id', 'day_of_data_capture',
-                                      'session_id', 'product_name', 'date_hour_minute']
-
         self.primary_key = primary_key
 
     # Get all the features that need to be parsed from the jsons.
@@ -117,10 +114,11 @@ class BasicPreprocessor:
              'needs_conversion': True,
              },
             {'field_name': 'product_detail_views',
-             'original_name': 'ga:productDetailViews',
+             'original_name':'ga:productDetailViews',
              'needs_conversion': True,
-             }
+            }
         ]
+
 
         self.field_baselines = field_baselines
 
@@ -236,22 +234,6 @@ class BasicPreprocessor:
                     f.col('jdata.metrics').alias('jdata_metrics')))
 
 
-        after_json_parsing_df['ga_epnap_df'] = (
-            dataframes['ga_epnap_df']
-            .withColumn('jmeta', f.from_json(
-                f.col('json_meta'), json_schemas['ga_epnap_df']['json_meta_schema']))
-            .withColumn('jdata', f.from_json(
-                f.col('json_data'), json_schemas['ga_epnap_df']['json_data_schema']))
-            .select(f.col('client_id'),
-                    f.col('day_of_data_capture'),
-                    f.col('session_id'),
-                    f.col('date_hour_minute'),
-                    f.col('product_name'),
-                    f.col('jmeta.dimensions').alias('jmeta_dimensions'),
-                    f.col('jmeta.metrics').alias('jmeta_metrics'),
-                    f.col('jdata.dimensions').alias('jdata_dimensions'),
-                    f.col('jdata.metrics').alias('jdata_metrics')))
-
         return after_json_parsing_df
 
     # Parse json data.
@@ -313,7 +295,7 @@ class BasicPreprocessor:
                 'schema_as_list': schema_as_list}
 
     # Save the raw dfs to Cassandra tables.
-    def save_raw_data(self, user_data, session_data, hit_data, product_data):
+    def save_raw_data(self, user_data, session_data, hit_data):
 
         save_options_ga_epnau_features_raw = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
@@ -326,10 +308,6 @@ class BasicPreprocessor:
         save_options_ga_epnah_features_raw = {
             'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
             'table': ('ga_epnah_features_raw')
-        }
-        save_options_ga_epnap_features_raw = {
-            'keyspace': self.MORPHL_CASSANDRA_KEYSPACE,
-            'table': ('ga_epnap_features_raw')
         }
 
         (user_data
@@ -351,13 +329,6 @@ class BasicPreprocessor:
             .format('org.apache.spark.sql.cassandra')
             .mode('append')
             .options(**save_options_ga_epnah_features_raw)
-            .save())
-
-        (product_data
-            .write
-            .format('org.apache.spark.sql.cassandra')
-            .mode('append')
-            .options(**save_options_ga_epnap_features_raw)
             .save())
 
     def main(self):
@@ -385,10 +356,6 @@ class BasicPreprocessor:
         ga_epna_hits_df = self.fetch_from_cassandra(
             'ga_epna_hits', spark_session)
 
-        ga_epna_product_info_df = self.fetch_from_cassandra(
-            'ga_epna_product_info', spark_session
-        )
-
         dataframes = {}
 
         # Filter them by the date we need.
@@ -404,10 +371,6 @@ class BasicPreprocessor:
             ga_epna_hits_df
             .filter("day_of_data_capture >= '{}'".format(start_date)))
 
-        dataframes['ga_epnap_df'] = (
-            ga_epna_product_info_df
-            .filter("day_of_data_capture >= '{}'".format(start_date)))
-
         json_schemas = {}
 
         # Get each df's json schema.
@@ -417,8 +380,6 @@ class BasicPreprocessor:
             dataframes['ga_epnas_df'], spark_session)
         json_schemas['ga_epnah_df'] = self.get_json_schemas(
             dataframes['ga_epnah_df'], spark_session)
-        json_schemas['ga_epnap_df'] = self.get_json_schemas(
-            dataframes['ga_epnap_df'], spark_session)
 
         after_json_parsing_df = self.get_parsed_jsons(json_schemas, dataframes)
 
@@ -433,11 +394,6 @@ class BasicPreprocessor:
         processed_hits_dict = self.process_json_data(after_json_parsing_df['ga_epnah_df'],
                                                      self.primary_key['ga_epnah_df'],
                                                      self.field_baselines['ga_epnah_df'])
-
-
-        processed_products_dict = self.process_json_data(after_json_parsing_df['ga_epnap_df'],
-                                                     self.primary_key['ga_epnap_df'],
-                                                     self.field_baselines['ga_epnap_df'])
                                     
                                     
 
@@ -447,9 +403,7 @@ class BasicPreprocessor:
 
         hits_df = processed_hits_dict['result_df']
 
-        products_df = processed_products_dict['result_df']
-
-        self.save_raw_data(users_df, sessions_df, hits_df, products_df)
+        self.save_raw_data(users_df, sessions_df, hits_df)
 
 
 if __name__ == '__main__':

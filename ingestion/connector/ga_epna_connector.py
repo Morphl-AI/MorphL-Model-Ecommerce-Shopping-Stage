@@ -121,23 +121,8 @@ class CassandraPersistence:
                     'client_id': client_id,
                     'session_id': session_id}
 
-        # Session shopping stage data
-        if report_type in self.type_4_set:
-            session_id = data_dict['dimensions'][1] + '.' + \
-                str(client_id) + '.' + day_of_data_capture_timestamp
-            shopping_stage = data_dict['dimensions'][2]
-            bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
-                         session_id, shopping_stage]
-
-            return {'cassandra_future': self.session.execute_async(self.prep_stmts[report_type],
-                                                                   bind_list,
-                                                                   timeout=self.CASS_REQ_TIMEOUT),
-                    'client_id': client_id,
-                    'session_id': session_id,
-                    'shopping_stage': shopping_stage}
-
         # Hit related data
-        if report_type in self.type_5_set:
+        if report_type in self.type_4_set:
             session_id = data_dict['dimensions'][1] + '.' + \
                 str(client_id) + '.' + day_of_data_capture_timestamp
             date_hour_minute = data_dict['dimensions'][2]
@@ -151,25 +136,8 @@ class CassandraPersistence:
                     'session_id': session_id,
                     'date_hour_minute': date_hour_minute}
 
-        if report_type in self.type_6_set:
-            session_id = data_dict['dimensions'][1] + '.' + \
-                str(client_id) + '.' + day_of_data_capture_timestamp
-            date_hour_minute = data_dict['dimensions'][2]
-            product_name = data_dict['dimensions'][3]
-
-            bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
-                         session_id, product_name, date_hour_minute, json_meta, json_data]
-
-            return {'cassandra_future': self.session.execute_async(self.prep_stmts[report_type],
-                                                                   bind_list,
-                                                                   timeout=self.CASS_REQ_TIMEOUT),
-                    'client_id': client_id,
-                    'session_id': session_id,
-                    'product_name': product_name,
-                    'date_hour_minute': date_hour_minute
-                    }
-
-        if report_type in self.type_7_set:
+        # Session count
+        if report_type in self.type_5_set:
             session_id = data_dict['dimensions'][1] + '.' + \
                 str(client_id) + '.' + day_of_data_capture_timestamp
 
@@ -184,6 +152,20 @@ class CassandraPersistence:
                     'client_id': client_id,
                     'session_id': session_id,
                     }
+
+        if report_type in self.type_7_set:
+            session_id = data_dict['dimensions'][1] + '.' + \
+                str(client_id) + '.' + day_of_data_capture_timestamp
+            shopping_stage = data_dict['dimensions'][2]
+            bind_list = [client_id, self.DAY_OF_DATA_CAPTURE,
+                         session_id, shopping_stage]
+
+            return {'cassandra_future': self.session.execute_async(self.prep_stmts[report_type],
+                                                                   bind_list,
+                                                                   timeout=self.CASS_REQ_TIMEOUT),
+                    'client_id': client_id,
+                    'session_id': session_id,
+                    'shopping_stage': shopping_stage}
 
 
 class GoogleAnalytics:
@@ -320,26 +302,6 @@ class GoogleAnalytics:
 
         return self.run_report_and_store('sessions', dimensions, metrics, user_segment)
 
-    # Get sessions shopping stages separately from general session data because shopping stages show up
-    # as one per row and would cause alot of data duplication for all the other columns.
-    def store_sessions_shopping_stages(self, user_segment):
-        dimensions = ['dimension8', 'dimension2', 'shoppingStage']
-        metrics = ['pageviews']
-
-        # Apply a filter when retrieving shopping stages so that we only get shopping stages relevant to
-        # our model.
-        dimensions_filters = {
-            "filters": [
-                {
-                    "dimensionName": "ga:shoppingStage",
-                    "operator": "IN_LIST",
-                    "expressions": ["ALL_VISITS", "PRODUCT_VIEW", "ADD_TO_CART", "CHECKOUT", "TRANSACTION"]
-                }
-            ]
-        }
-
-        return self.run_report_and_store('sessions_shopping_stages', dimensions, metrics, user_segment, dimensions_filters)
-
     # Get hit level data
     def store_hits(self, user_segment):
         dimensions = [
@@ -349,7 +311,7 @@ class GoogleAnalytics:
         # Pageviews is not used as a feature in the model since it is covered by
         # unique pageviews in the session's request. We add it here so that
         # hits that only have pageview events get retrieved aswell.
-        metrics = ['timeOnPage',  'pageviews']
+        metrics = ['timeOnPage',  'pageviews', 'productDetailViews']
 
         return self.run_report_and_store('hits', dimensions, metrics, user_segment)
 
@@ -375,6 +337,26 @@ class GoogleAnalytics:
         
         return self.run_report_and_store('session_index', dimensions, metrics, user_segment)
 
+    # Get sessions shopping stages separately from general session data because shopping stages show up
+    # as one per row and would cause alot of data duplication for all the other columns.
+    def store_shopping_stages(self, user_segment):
+        dimensions = ['dimension8', 'dimension2', 'shoppingStage']
+        metrics = ['pageviews']
+
+        # Apply a filter when retrieving shopping stages so that we only get shopping stages relevant to
+        # our model.
+        dimensions_filters = {
+            "filters": [
+                {
+                    "dimensionName": "ga:shoppingStage",
+                    "operator": "IN_LIST",
+                    "expressions": ["ALL_VISITS", "PRODUCT_VIEW", "ADD_TO_CART", "CHECKOUT", "TRANSACTION"]
+                }
+            ]
+        }
+
+        return self.run_report_and_store('shopping_stages', dimensions, metrics, user_segment, dimensions_filters)
+
     def run(self):
         self.authenticate()
 
@@ -390,13 +372,13 @@ class GoogleAnalytics:
             sleep(1)
             self.store_sessions(user_segment)
             sleep(1)
-            self.store_sessions_shopping_stages(user_segment)
-            sleep(1)
             self.store_hits(user_segment)
             sleep(1)
             self.store_product_info(user_segment)
             sleep(1)
             self.store_session_index(user_segment)
+            sleep(1)
+            self.store_shopping_stages(user_segment)
 
 
 def main():

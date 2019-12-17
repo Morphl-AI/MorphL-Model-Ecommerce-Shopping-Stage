@@ -67,8 +67,8 @@ class Cassandra:
         if len(p) == 0:
             bind_list = [client_id, datetime.now(), -1, -1, -1, -1, -1, -1]
         else:
-            bind_list = [client_id, datetime.now(), p[0]['all_visits'], p[0]['product_view'], p[0]['add_to_cart'],
-                         p[0]['checkout_with_add_to_cart'], p[0]['checkout_without_add_to_cart'], p[0]['transaction']]
+            bind_list = [client_id, datetime.now(), p[0]['untargetable'], p[0]['untargetable'], p[0]['targetable'],
+                         p[0]['targetable'], p[0]['targetable'] * 0.39, p[0]['targetable'] * 0.23]
 
         return self.session.execute(self.prep_stmts['access_logs']['insert'],
                                     bind_list, timeout=self.CASS_REQ_TIMEOUT)
@@ -126,12 +126,12 @@ def get_prediction(client_id):
 
     del p[0]['client_id']
     return jsonify(status=1, prediction={'client_id': client_id, 'shopping_stages': {
-        'all_visits': round(p[0]['all_visits'], 4),
-        'product_view': round(p[0]['product_view'], 4),
-        'add_to_cart': round(p[0]['add_to_cart'], 4),
-        'checkout_with_add_to_cart': round(p[0]['checkout_with_add_to_cart'], 4),
-        'checkout_without_add_to_cart': round(p[0]['checkout_without_add_to_cart'], 4),
-        'transaction': round(p[0]['transaction'], 4),
+        'all_visits': round(p[0]['untargetable'], 4),
+        'product_view': round(p[0]['untargetable'], 4),
+        'add_to_cart': round(p[0]['targetable'], 4),
+        'checkout_with_add_to_cart': round(p[0]['targetable'], 4),
+        'checkout_without_add_to_cart': round(p[0]['targetable'] *  0.39, 4),
+        'transaction': round(p[0]['targetable'] * 0.23, 4),
         'prediction_date': str(p[0]['prediction_date'])
     }})
 

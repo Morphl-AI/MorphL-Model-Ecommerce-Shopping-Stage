@@ -180,6 +180,10 @@ def min_max_sessions(session_features):
     for i in range(0, 9):
         session_features[i] = clip(
             (session_features[i] - min[i]) / (max[i] - min[i]))
+    
+    session_features[7] = clip((session_features[7]  - 0.0)  / (20.0 - 0.0))
+    session_features[8] = clip((session_features[8]  - 1.0)  / (141.0 - 1.0))
+
 
     return session_features
 
@@ -201,7 +205,7 @@ def min_max_users(users_features):
 
     for i in range(0, 15):
         users_features[i] = clip(
-            (users_features[i] - min[i]) / (max[i] - min[i]))
+            (users_features[i] - min[i - 5]) / (max[i - 5] - min[i - 5]))
 
     return users_features
 
@@ -272,6 +276,9 @@ def main():
     users_df = calculate_search_features(
         users_df, ga_epnas_features_filtered_df)
 
+    ga_epnas_features_filtered_df = ga_epnas_features_filtered_df.drop(
+        'transactions', 'transaction_revenue')
+
     # Initialize udfs
     min_maxer_hits = f.udf(min_max_hits, ArrayType(DoubleType()))
     min_maxer_sessions = f.udf(min_max_sessions, ArrayType(DoubleType()))
@@ -309,7 +316,6 @@ def main():
                              'session_id',
                              'date_hour_minute',
                              f.array(
-                                 f.col('time_on_page'),
                                  f.col('product_detail_views'),
                              ).alias('hits_features')
                          ).
@@ -451,3 +457,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
