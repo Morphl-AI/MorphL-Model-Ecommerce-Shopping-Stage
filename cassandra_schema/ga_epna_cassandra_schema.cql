@@ -93,9 +93,9 @@ CREATE TABLE morphl.ga_epnas_features_raw (
   session_id text, 
   day_of_data_capture date,
   session_duration double, 
-  unique_page_views double,
-  search_result_views double,
-  search_uniques double, 
+  unique_pageviews double,
+  results_pageviews double,
+  total_unique_searches double, 
   search_depth double,
   search_refinements double,
   search_used text,
@@ -131,7 +131,7 @@ DROP TABLE IF EXISTS morphl.ga_epnau_features_filtered;
 
 CREATE TABLE morphl.ga_epnau_features_filtered (
     client_id text,
-    session_count int,
+    total_number_of_sessions int,
     first_collected_index int,
     device_category text,
     browser text,
@@ -148,10 +148,10 @@ CREATE TABLE morphl.ga_epnas_features_filtered (
   client_id text,
   session_id text, 
   session_duration double, 
-  unique_page_views double,
+  unique_pageviews double,
   days_since_last_session double,
-  search_result_views double,
-  search_uniques double, 
+  results_pageviews double,
+  total_unique_searches double, 
   search_depth double,
   search_refinements double,
   search_used text, 
@@ -186,12 +186,8 @@ DROP TABLE IF EXISTS morphl.ga_epna_predictions;
 CREATE TABLE morphl.ga_epna_predictions(
   client_id text, 
   prediction_date date,
-  all_visits double, 
-  product_view double, 
-  add_to_cart double, 
-  checkout_with_add_to_cart double, 
-  checkout_without_add_to_cart double,
-  transaction double,
+  targetable double,
+  untargetable double,
   PRIMARY KEY((client_id))
 );
 
@@ -214,12 +210,8 @@ DROP TABLE IF EXISTS morphl.ga_epna_predictions_statistics;
 CREATE TABLE morphl.ga_epna_predictions_statistics(
   prediction_date date,
   total_predictions int,
-  all_visits int, 
-  product_view int, 
-  add_to_cart int, 
-  checkout_with_add_to_cart int, 
-  checkout_without_add_to_cart int, 
-  transaction int,
+  targetable int,
+  untargetable int,
   PRIMARY KEY((prediction_date))
 );
 
