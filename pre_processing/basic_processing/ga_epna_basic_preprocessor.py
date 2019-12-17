@@ -58,8 +58,8 @@ class BasicPreprocessor:
 
         # session_duration: the total duration of a session;
         # unique_page_views: the number of unique pageviews during a session;
-        # search_result_views: the number of times a search result page was viewed in a session;
-        # search_uniques: total number of unique keywords from internal searches during a session;
+        # results_pageviews: the number of times a search result page was viewed in a session;
+        # total_unique_searches: total number of unique keywords from internal searches during a session;
         # search_depth: total number of subsequent page views made after an internal search;
         # search_refinements: the number of times a transition occurs between internal keywords search within a session
         #                     ex: "shoes", "shoes", "pants", "pants" => 1 transition from shoes to pants
@@ -70,15 +70,15 @@ class BasicPreprocessor:
              'original_name': 'ga:sessionDuration',
              'needs_conversion': True,
              },
-            {'field_name': 'unique_page_views',
+            {'field_name': 'unique_pageviews',
              'original_name': 'ga:uniquePageviews',
              'needs_conversion': True,
              },
-            {'field_name': 'search_result_views',
+            {'field_name': 'results_pageviews',
              'original_name': 'ga:searchResultViews',
              'needs_conversion': True,
              },
-            {'field_name': 'search_uniques',
+            {'field_name': 'total_unique_searches',
              'original_name': 'ga:searchUniques',
              'needs_conversion': True,
              },

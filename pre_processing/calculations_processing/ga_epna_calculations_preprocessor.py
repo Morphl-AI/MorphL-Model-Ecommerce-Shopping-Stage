@@ -131,7 +131,7 @@ def calculate_search_features(user_features, session_features):
                        .groupBy('client_id')
                        .agg(
                            f.count('session_id').alias('number_of_sessions'),
-                           f.sum('search_result_views').alias(
+                           f.sum('results_pageviews').alias(
                                'number_of_searches')
                        )
                        )
@@ -177,7 +177,7 @@ def min_max_sessions(session_features):
     min = [0.0, 0.0, 0.0, 0.0, 0.7, 0.0, 0.0, 0.0, 1.0]
     max = [130.0, 37.0, 135.0, 22.0, 11500.0, 1.0, 1.0, 20.0, 110.0]
 
-    for i in range(0, 7):
+    for i in range(0, 9):
         session_features[i] = clip(
             (session_features[i] - min[i]) / (max[i] - min[i]))
 
@@ -199,7 +199,7 @@ def min_max_users(users_features):
     max = [3274.44, 0.073248476, 5707.6587, 0.100638375, 1.0, 1.0, 1.0,
            2391.0286, 0.06703993, 13.0, 6121.0, 32.0, 1666.0, 1.0, 1.0]
 
-    for i in range(0, 18):
+    for i in range(0, 15):
         users_features[i] = clip(
             (users_features[i] - min[i]) / (max[i] - min[i]))
 
@@ -341,12 +341,12 @@ def main():
 
     ga_epna_data_sessions = (ga_epnas_features_filtered_df
                              .withColumn(
-                                 'with_site_search',
+                                 'site_search_status_visit_with_site_search',
                                  f.when(f.col('search_used') == 'Visits With Site Search', 1.0).otherwise(
                                      0.0)
                              )
                              .withColumn(
-                                 'without_site_search',
+                                 'site_search-status_visit_without_site_search',
                                  f.when(f.col('search_used') == 'Visits Without Site Search', 1.0).otherwise(
                                      0.0)
                              )
@@ -355,14 +355,14 @@ def main():
                                  'session_id',
                                  f.array(
                                      f.col('days_since_last_session'),
-                                     f.col('search_result_views'),
+                                     f.col('results_pageviews'),
                                      f.col('search_depth'),
                                      f.col('search_refinements'),
                                      f.col('session_duration'),
-                                     f.col('with_site_search'),
-                                     f.col('without_site_search'),
-                                     f.col('search_uniques'),
-                                     f.col('unique_page_views'),
+                                     f.col('site_search_status_visit_with_site_search'),
+                                     f.col('site_search-status_visit_without_site_search'),
+                                     f.col('total_unique_searches'),
+                                     f.col('unique_pageviews'),
                                  ).alias('sessions_features')
                              )
                              .withColumn('sessions_features', min_maxer_sessions('sessions_features'))
@@ -377,15 +377,15 @@ def main():
     # user[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
     ga_epna_data_users = (users_df.
                           withColumn(
-                              'is_mobile', f.when(
+                              'device_category_mobile', f.when(
                                   f.col('device_category') == 'mobile', 1.0).otherwise(0.0)
                           ).
                           withColumn(
-                              'is_tablet', f.when(
+                              'device_category_tablet', f.when(
                                   f.col('device_category') == 'tablet', 1.0).otherwise(0.0)
                           ).
                           withColumn(
-                              'is_desktop', f.when(
+                              'device_category_desktop', f.when(
                                   f.col('device_category') == 'desktop', 1.0).otherwise(0.0)
                           ).
                           withColumn(
@@ -403,13 +403,13 @@ def main():
                                   f.col('browser_transactions_per_user'),
                                   f.col('city_revenue_per_transaction'),
                                   f.col('city_transactions_per_user'),
-                                  f.col('is_desktop'),
-                                  f.col('is_mobile'),
-                                  f.col('is_tablet'),
+                                  f.col('device_category_desktop'),
+                                  f.col('device_category_mobile'),
+                                  f.col('device_category_tablet'),
                                   f.col('device_revenue_per_transaction'),
                                   f.col('device_transactions_per_user'),
                                   f.col('searches_per_session'),
-                                  f.col('session_count'),
+                                  f.col('total_number_of_sessions'),
                                   f.col('total_products_ordered'),
                                   f.col('total_products_viewed'),
                                   f.col('user_type_new_user'),
