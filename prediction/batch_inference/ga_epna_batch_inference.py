@@ -175,9 +175,6 @@ class ModelTargetabilityRNN(nn.Module):
         self.loadModel(path, stateKeys=["weights", "model_state"])
 
     def forward(self, trInputs):
-        lastTwo = trInputs["dataSessions"][:, 0, -2 :]
-        trInputs["dataSessions"] = trInputs["dataSessions"][:, :, 0 : -2]  
-        trInputs["dataUsers"] = tr.cat([trInputs["dataUsers"],lastTwo], dim=-1)
         # print(["%s=>%s" % (x, trInputs[x].shape) for x in trInputs])
         hiddens = self.computeHiddens(trInputs)
         # print(hiddens.shape)
@@ -303,7 +300,7 @@ def get_predictions(row):
 # Load the model
 model = ModelTargetabilityRNN(
     hyperParameters = {"randomizeSessionSize" : True, "hiddenShape1" : 20, "hiddenShape2" : 30, \
-        "inShape" : (10, 9, 2), "outShape" : 2, "labelColumnName" : "Next Shopping Stage Binary Targetable"
+        "inShape" : (15, 9, 2), "outShape" : 2, "labelColumnName" : "Next Shopping Stage Binary Targetable"
     }
 )
 # Load the model weights.
@@ -379,4 +376,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
