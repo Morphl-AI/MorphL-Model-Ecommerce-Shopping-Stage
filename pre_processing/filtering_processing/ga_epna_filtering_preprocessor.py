@@ -263,7 +263,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                            .repartition(32)
                            )
 
-    filtered_users_df.repartition(32)
+    aggregated_users_df.repartition(32)
 
     # Remove user duplicates and get their respective mobile device brand.
     grouped_mobile_brand_df = (filtered_mobile_brand_df.
@@ -274,7 +274,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
 
     # Add the mobile data to users that have a mobile device, otherwise
     # make the column equal to (not set).
-    final_users_df = (filtered_users_df.
+    final_users_df = (aggregated_users_df.
                       join(grouped_mobile_brand_df,
                            'client_id', 'left_outer')
                       .na.fill({
@@ -371,6 +371,7 @@ def main():
         ga_epnas_features_filtered_df,
         shopping_stages_df,
         ga_epnah_features_raw,
+        ga_epnap_features_raw,
         session_index_df
     ))
 
