@@ -72,6 +72,7 @@ task_4_run_calculations_preprocessor_cmd_parts = [
     f'UNIQUE_HASH={unique_hash}',
     'PREDICTION_DAY_AS_STR={{ ds }}',
     'TRAINING_OR_PREDICTION=prediction',
+    'MODELS_DIR=/opt/models',
     'docker run --rm --net host',
     '-v /opt/ga_epna:/opt/ga_epna:ro',
     '-v /opt/hadoop/etc/hadoop:/opt/hadoop/etc/hadoop:ro',
