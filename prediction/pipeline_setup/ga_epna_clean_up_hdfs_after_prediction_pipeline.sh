@@ -4,7 +4,7 @@ remove_hdfs() {
     hdfs dfs -test -e $1
 
     if [ $? -eq 0 ]; then
-        hdfs dfs -rm $1
+        hdfs dfs -rm $1/*
         hdfs dfs -rmdir $1
     fi
 }

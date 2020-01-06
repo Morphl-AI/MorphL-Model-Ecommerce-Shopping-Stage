@@ -30,7 +30,7 @@ task_1_truncate_tables_cmd = ' '.join(task_1_truncate_tables_cmd_parts)
 task_2_clean_up_hdfs_cmd_parts = [
     f'UNIQUE_HASH={unique_hash}',
     'CURRENT_PREDICTION_DAY_AS_STR={{ ds }}',
-    'PREVIOUS_PREDICTION_DAY_AS_STR={{ prev_ds }}',
+    'PREVIOUS_PREDICTION_DAY_AS_STR={{ yesterday_ds }}',
     'bash /opt/ga_epna/prediction/pipeline_setup/ga_epna_clean_up_hdfs_after_prediction_pipeline.sh ']
 task_2_clean_up_hdfs_cmd = ' '.join(task_2_clean_up_hdfs_cmd_parts)
 
