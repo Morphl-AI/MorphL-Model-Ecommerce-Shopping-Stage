@@ -23,26 +23,26 @@ git clone ${WHERE_GA_EPNA_IS} /opt/ga_epna
     - City statistics: `city`, `city_transactions_per_user` and `city_revenue_per_transaction`.
     - Mobile brand statistics: `device_name`, `device_transactions_per_user` and `device_revenue_per_transaction`. 
 
-3. Create environment variables:
+4. Create environment variables:
 
 ```
 bash /opt/ga_epna/setup_environment.sh
 ```
 
-4. Log out of `airflow` and back in again, and verify that your key file and view ID have been configured correctly:
+5. Log out of `airflow` and back in again, and verify that your key file and view ID have been configured correctly:
 
 ```
 env | grep GA_EPNA_KEY_FILE_LOCATION
 env | grep GA_EPNA_VIEW_ID
 ```
 
-5. Setup Cassandra tables:
+6. Setup Cassandra tables:
 
 ```
 bash /opt/ga_epna/install.sh
 ```
 
-6. Load data from the Google Analytics API and start pipelines:
+7. Load data from the Google Analytics API and start pipelines:
 
 ```
 bash /opt/ga_epna/ingestion/load_historical_data/load_ga_epna_historical_data.sh
