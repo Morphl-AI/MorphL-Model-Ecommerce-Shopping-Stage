@@ -189,15 +189,15 @@ def min_max_users(users_features):
     # [
     # 'browser_revenue_per_transaction', browser_transactions_per_user', 'city_revenue_per_transaction', 'city_transactions_per_user',
     # 'device_category_desktop', 'device_category_mobile', 'device_category_tablet', 'device_revenue_per_transaction', 'device_transactions_per_user',
-    # 'searches_per_session', 'total_number_of_sessions', 'total_products_ordered', 'total_products_viewed',
+    # 'searches_per_session', 'total_number_of_sessions', 'total_products_viewed',
     # 'user_type_new_user', 'user_type_returning_user'
     # ]
 
     min = [1445.3, 0.038495857, 0.0, 0.0, 0.0, 0.0, 0.0,
-           1000.0589, 0.027276857, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0]
+           1000.0589, 0.027276857, 0.0, 1.0, 1.0, 0.0, 0.0]
 
     max = [3274.44, 0.073248476, 5707.6587, 0.100638375, 1.0, 1.0, 1.0,
-           2391.0286, 0.06703993, 13.0, 6121.0, 32.0, 1666.0, 1.0, 1.0]
+           2391.0286, 0.06703993, 13.0, 6121.0, 1666.0, 1.0, 1.0]
 
     for i in range(0, 15):
         users_features[i] = clip(
@@ -410,7 +410,6 @@ def main():
                                   f.col('device_transactions_per_user'),
                                   f.col('searches_per_session'),
                                   f.col('total_number_of_sessions'),
-                                  f.col('total_products_ordered'),
                                   f.col('total_products_viewed'),
                                   f.col('user_type_new_user'),
                                   f.col('user_type_returning_user')

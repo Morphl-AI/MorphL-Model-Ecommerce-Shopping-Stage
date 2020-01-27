@@ -231,26 +231,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                                 )
                                 )
 
-    total_products_ordered = (product_info_df
-                              .where('item_quantity > 0.0')
-                              .groupBy(['client_id', 'product_name'])
-                              .agg(
-                                  f.sum('item_quantity').alias(
-                                      'product_quantity')
-                              )
-                              .groupBy('client_id')
-                              .agg(
-                                  f.sum('product_quantity').alias(
-                                      'total_products_ordered')
-                              )
-                              )
-
     aggregated_users_df = (aggregated_users_df
-                           .join(
-                               total_products_ordered,
-                               'client_id',
-                               'left_outer'
-                           )
                            .join(
                                total_products_viewed_df,
                                'client_id',
@@ -258,7 +239,7 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                            )
                            .fillna(
                                0.0,
-                               ['total_products_viewed', 'total_products_ordered']
+                               ['total_products_viewed']
                            )
                            .repartition(32)
                            )

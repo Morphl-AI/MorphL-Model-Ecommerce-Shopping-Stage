@@ -137,7 +137,6 @@ CREATE TABLE morphl.ga_epnau_features_filtered (
     browser text,
     city text,
     mobile_device_branding text,
-    total_products_ordered double,
     total_products_viewed double,
     PRIMARY KEY ((client_id))
 );
