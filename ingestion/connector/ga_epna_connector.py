@@ -241,7 +241,7 @@ class GoogleAnalytics:
             {
                 "filters": [
                     {
-                        "dimensionName": "ga:dimension8",
+                        "dimensionName": "ga:dimension5",
                         "operator": "BEGINS_WITH",
                         "expressions": [user_segment]
                     }
@@ -299,7 +299,7 @@ class GoogleAnalytics:
 
     # Get user level data
     def store_users(self, user_segment):
-        dimensions = ['dimension8', 'deviceCategory', 'browser', 'city']
+        dimensions = ['dimension5', 'deviceCategory', 'browser', 'city']
         metrics = ['sessions']
 
         return self.run_report_and_store('users', dimensions, metrics, user_segment)
@@ -308,14 +308,14 @@ class GoogleAnalytics:
     # the google reporting API would only return mobile users if requested together
     # with the rest of the data.
     def store_users_mobile_brand(self, user_segment):
-        dimensions = ['dimension8', 'mobileDeviceBranding']
+        dimensions = ['dimension5', 'mobileDeviceBranding']
         metrics = ['sessions']
 
         return self.run_report_and_store('users_mobile_brand', dimensions, metrics, user_segment)
 
     # Get session level data
     def store_sessions(self, user_segment):
-        dimensions = ['dimension8', 'dimension2', 'searchUsed', 'daysSinceLastSession']
+        dimensions = ['dimension5', 'dimension6', 'searchUsed', 'daysSinceLastSession']
         metrics = ['sessionDuration', 'uniquePageviews', 'searchResultViews', 'searchUniques', 'searchDepth', 'searchRefinements']
 
         return self.run_report_and_store('sessions', dimensions, metrics, user_segment)
@@ -323,7 +323,7 @@ class GoogleAnalytics:
     # Get sessions shopping stages separately from general session data because shopping stages show up
     # as one per row and would cause alot of data duplication for all the other columns.
     def store_sessions_shopping_stages(self, user_segment):
-        dimensions = ['dimension8', 'dimension2', 'shoppingStage']
+        dimensions = ['dimension5', 'dimension6', 'shoppingStage']
         metrics = ['pageviews']
 
         # Apply a filter when retrieving shopping stages so that we only get shopping stages relevant to
@@ -343,7 +343,7 @@ class GoogleAnalytics:
     # Get hit level data
     def store_hits(self, user_segment):
         dimensions = [
-            'dimension8', 'dimension2', 'dateHourMinute'
+            'dimension5', 'dimension6', 'dateHourMinute'
         ]
 
         # Pageviews is not used as a feature in the model since it is covered by
@@ -355,8 +355,8 @@ class GoogleAnalytics:
 
     def store_product_info(self, user_segment):
         dimensions = [
-            'dimension8',
-            'dimension2',
+            'dimension5',
+            'dimension6',
             'dateHourMinute',
             'productName'
         ]
@@ -368,7 +368,7 @@ class GoogleAnalytics:
         return self.run_report_and_store('product_info', dimensions, metrics, user_segment)
 
     def store_session_index(self, user_segment):
-        dimensions = ['dimension8', 'dimension2', 'sessionCount']
+        dimensions = ['dimension5', 'dimension6', 'sessionCount']
         
         metrics = ['hits']
         
