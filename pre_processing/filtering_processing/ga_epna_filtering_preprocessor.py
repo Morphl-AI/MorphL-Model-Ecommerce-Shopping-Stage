@@ -67,8 +67,6 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
     hit_features_product_info_df = (product_info_df
                                     .groupBy(['client_id', 'day_of_data_capture', 'session_id', 'date_hour_minute'])
                                     .agg(
-                                        f.sum('item_quantity').alias(
-                                            'item_quantity'),
                                         f.sum('product_detail_views').alias(
                                             'product_detail_views')
                                     )
@@ -89,7 +87,6 @@ def filter_data(users_df, mobile_brand_df, sessions_df, shopping_stages_df, hits
                    0.0,
                    [
                        'product_detail_views',
-                       'item_quantity',
                    ]
                )
                .repartition(32)

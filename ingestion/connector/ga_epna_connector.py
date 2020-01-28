@@ -363,7 +363,6 @@ class GoogleAnalytics:
         
         metrics = [
             'productDetailViews',
-            'itemQuantity',
         ]
         
         return self.run_report_and_store('product_info', dimensions, metrics, user_segment)

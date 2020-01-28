@@ -109,13 +109,8 @@ class BasicPreprocessor:
         ]
 
 
-        # item_quantity: number of items purchased;
         # product_detail_views: number of times users viewed the product-detail page.
         field_baselines['ga_epnap_df'] = [
-            {'field_name': 'item_quantity',
-             'original_name': 'ga:itemQuantity',
-             'needs_conversion': True,
-             },
             {'field_name': 'product_detail_views',
              'original_name':'ga:productDetailViews',
              'needs_conversion': True,

@@ -122,7 +122,6 @@ CREATE TABLE morphl.ga_epnap_features_raw (
   session_id text, 
   date_hour_minute text,
   product_name text, 
-  item_quantity double,
   product_detail_views double, 
   PRIMARY KEY ((client_id), day_of_data_capture, session_id, date_hour_minute, product_name )
 ) WITH CLUSTERING ORDER BY (day_of_data_capture DESC);
@@ -165,7 +164,6 @@ CREATE TABLE morphl.ga_epnah_features_filtered (
   date_hour_minute text,
   time_on_page double,
   product_detail_views double,
-  item_quantity double,
   PRIMARY KEY ((client_id),session_id, date_hour_minute)
 );
 
