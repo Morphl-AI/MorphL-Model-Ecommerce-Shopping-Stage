@@ -159,7 +159,7 @@ def clip(value):
 def min_max_hits(hit_features):
     # ['time_on_page', 'product_detail_views']
     min = [0.0, 0.0]
-    max = [1510.0, 2.0]
+    max = [1431.0, 2.0]
 
     for i in range(0, 2):
         hit_features[i] = clip((hit_features[i] - min[i]) / (max[i] - min[i]))
@@ -174,8 +174,8 @@ def min_max_sessions(session_features):
     # 'session_duration', 'site_search_status_visit_with_site_search', 'site_search_status_visit_without_site_search',
     # 'unique_searches', 'unique_pageviews'
     # ]
-    min = [0.0, 0.0, 0.0, 0.0, 0.7, 0.0, 0.0, 0.0, 1.0]
-    max = [130.0, 37.0, 135.0, 22.0, 11500.0, 1.0, 1.0, 20.0, 110.0]
+    min = [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+    max = [137.0, 31.0, 93.0, 16.0, 8039.0, 1.0, 1.0, 16.0, 79.0]
 
     for i in range(0, 9):
         session_features[i] = clip(
@@ -193,13 +193,13 @@ def min_max_users(users_features):
     # 'user_type_new_user', 'user_type_returning_user'
     # ]
 
-    min = [1445.3, 0.038495857, 0.0, 0.0, 0.0, 0.0, 0.0,
-           1000.0589, 0.027276857, 0.0, 1.0, 1.0, 0.0, 0.0]
+    min = [121.3001480102539, 0.09132226556539536, 0.0, 0.0, 0.0, 0.0, 0.0,
+           33.569889068603516, 0.0019354838877916336, 0.0, 1.0, 1.0, 0.0, 0.0]
 
-    max = [3274.44, 0.073248476, 5707.6587, 0.100638375, 1.0, 1.0, 1.0,
-           2391.0286, 0.06703993, 13.0, 6121.0, 1666.0, 1.0, 1.0]
+    max = [321.883056640625, 0.3490813672542572, 461.4109802246094, 0.3598484992980957,
+           1.0, 1.0, 1.0, 306.5605163574219, 0.2526397705078125, 21.0, 569.0, 290.0, 1.0, 1.0]
 
-    for i in range(0, 15):
+    for i in range(0, 14):
         users_features[i] = clip(
             (users_features[i] - min[i]) / (max[i] - min[i]))
 
@@ -359,8 +359,10 @@ def main():
                                      f.col('search_depth'),
                                      f.col('search_refinements'),
                                      f.col('session_duration'),
-                                     f.col('site_search_status_visit_with_site_search'),
-                                     f.col('site_search_status_visit_without_site_search'),
+                                     f.col(
+                                         'site_search_status_visit_with_site_search'),
+                                     f.col(
+                                         'site_search_status_visit_without_site_search'),
                                      f.col('total_unique_searches'),
                                      f.col('unique_pageviews'),
                                  ).alias('sessions_features')
