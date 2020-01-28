@@ -300,7 +300,7 @@ def get_predictions(row):
 # Load the model
 model = ModelTargetabilityRNN(
     hyperParameters = {"randomizeSessionSize" : True, "hiddenShape1" : 20, "hiddenShape2" : 30, \
-        "inShape" : (15, 9, 2), "outShape" : 2, "labelColumnName" : "Next Shopping Stage Binary Targetable"
+        "inShape" : (14, 9, 2), "outShape" : 2, "labelColumnName" : "Next Shopping Stage Binary Targetable"
     }
 )
 # Load the model weights.
